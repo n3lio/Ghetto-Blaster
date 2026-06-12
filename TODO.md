@@ -25,7 +25,7 @@
 - [x] ~~**Validation stricte des body JSON**~~ *(P1)* — helpers `lib/validation.js` + cap queue 10k + types stricts sur queue/playlists/favorites.
 - [x] ~~**Path traversal**~~ *(P1)* — audité : tous les accès fichiers passent par `library[id]`, le client ne fournit jamais de chemin.
 - [ ] **Limiter taille file watcher** *(P2)* — si l'user ajoute un dossier énorme par erreur, debounce + max items.
-- [ ] **Logs structurés** *(P2)* — remplacer `console.log` par un logger (pino/winston) avec niveaux et fichier rotatif.
+- [x] ~~**Logs structurés**~~ *(P2)* — `lib/logger.js` (zero dep, JSON Lines + rotation 5×5MB), wired sur server-module + endpoints `/api/_dev/log-tail` & `log-level`.
 
 ## 🧪 Tests & qualité
 
@@ -120,8 +120,8 @@
 
 ## ⚡ Performance
 
-- [~] **Découper `index.html`** *(P1)* — partial : CSS extrait dans `public/style.css` (3583 → 2841 lignes). Le JS inline reste à éclater en modules.
-- [ ] **Bundler frontend (esbuild/vite)** *(P2)* — minifier, tree-shake. À faire après le split JS.
+- [x] ~~**Découper `index.html`**~~ *(P1)* — CSS extrait dans `style.css`, JS inline (~2470 lignes) extrait dans `public/js/main.js`. `index.html` à 436 lignes.
+- [x] ~~**Bundler frontend (esbuild/vite)**~~ *(P2)* — esbuild setup en `scripts/build-frontend.js` (`npm run build:frontend`/`watch:frontend`). Pas wired dans le build prod par défaut, dispo pour quand on splitte main.js en sous-modules.
 - [x] ~~**Scan en worker thread**~~ *(P2)* — pool `lib/scanner-pool.js`, opt-in via `config.scanInWorker`.
 - [ ] **Lazy-load library côté UI** *(P2)* — si > 10k tracks, ne pas tout envoyer d'un coup.
 - [x] ~~**WebSocket : debounce broadcasts d'état**~~ *(P2)* — fenêtre 80ms, collapse les bursts state/desktop:state/users:changed.
@@ -132,7 +132,7 @@
 - [x] ~~**Hot reload du renderer en dev**~~ *(P2)* — `fs.watch` sur `public/`, reload sur change quand `--dev`.
 - [x] ~~**`npm run dev` qui ouvre devtools auto**~~ *(P2)* — devtools detached quand `--dev`.
 - [ ] **Script `npm run scan`** *(P3)* — scan headless pour debug.
-- [ ] **Mock library pour dev sans fichiers** *(P3)*.
+- [x] ~~**Mock library pour dev sans fichiers**~~ *(P3)* — `lib/mock-library.js` + endpoints `/api/_dev/library/{seed,clear}` + `npm run dev:server` qui boot tout en mode mock.
 - [x] ~~**`engines` dans package.json**~~ *(P2)* — Node ≥ 18.
 - [x] ~~**Mettre à jour les deps**~~ *(P1)* — Electron 28 → 31, ajout devDeps eslint/prettier/supertest.
 

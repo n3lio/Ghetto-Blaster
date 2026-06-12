@@ -27,13 +27,16 @@ let token;
 
 test.before(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gb-test-'));
-  // Seed config with no music folders so scan does nothing.
+  // Seed config with no music folders so scan does nothing. devMode enabled
+  // so the /api/_dev/* endpoints are reachable.
   fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
     musicFolders: [],
     excludeFolders: [],
     port: 0,
     scanOnStartup: false,
     watchForChanges: false,
+    devMode: true,
+    logLevel: 'error',
   }));
   server.setDataDir(tmpDir);
   // port 0 = OS-assigned; we read the actual port from the listening socket.
@@ -166,4 +169,46 @@ test('POST /api/playlists rejects empty name', async () => {
     .post('/api/playlists')
     .send({ name: '', trackIds: [1] })
     .expect(400);
+});
+
+test('GET /api/_dev/health returns runtime info', async () => {
+  const res = await request(baseUrl).get('/api/_dev/health').expect(200);
+  assert.equal(res.body.ok, true);
+  assert.equal(typeof res.body.version, 'string');
+  assert.equal(typeof res.body.uptime, 'number');
+  assert.equal(typeof res.body.memory, 'object');
+});
+
+test('GET /api/_dev/log-tail returns recent entries', async () => {
+  const res = await request(baseUrl).get('/api/_dev/log-tail?n=5').expect(200);
+  assert.equal(Array.isArray(res.body.entries), true);
+  assert.equal(typeof res.body.level, 'string');
+});
+
+test('POST /api/_dev/log-level changes the level', async () => {
+  const res = await request(baseUrl).post('/api/_dev/log-level').send({ level: 'warn' }).expect(200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.level, 'warn');
+});
+
+test('POST /api/_dev/log-level rejects bad input', async () => {
+  await request(baseUrl).post('/api/_dev/log-level').send({}).expect(400);
+});
+
+test('POST /api/_dev/library/seed populates the library', async () => {
+  const res = await request(baseUrl)
+    .post('/api/_dev/library/seed')
+    .send({ count: 20 })
+    .expect(200);
+  assert.equal(res.body.ok, true);
+  assert.ok(res.body.count >= 18); // sparse, ~2 gaps
+  // /api/tracks should now return data.
+  const tracks = await request(baseUrl).get('/api/tracks').expect(200);
+  assert.ok(tracks.body.length >= 18);
+});
+
+test('POST /api/_dev/library/clear empties the library', async () => {
+  await request(baseUrl).post('/api/_dev/library/clear').expect(200);
+  const tracks = await request(baseUrl).get('/api/tracks').expect(200);
+  assert.equal(tracks.body.length, 0);
 });

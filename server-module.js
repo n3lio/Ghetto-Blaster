@@ -10,6 +10,9 @@ const QRCode = require('qrcode');
 const validation = require('./lib/validation');
 const playlistLib = require('./lib/playlists');
 const { ScannerPool } = require('./lib/scanner-pool');
+const { setLogConfig, getLogger } = require('./lib/logger');
+const { buildMockLibrary, buildMockGenres } = require('./lib/mock-library');
+let log = getLogger();
 let scannerPool = null;
 // chokidar is more reliable than fs.watch (esp. recursive on Windows)
 let chokidar = null;
@@ -62,7 +65,15 @@ function setDataDir(dir) {
   // Ensure covers dir exists
   const coversDir = path.join(DATA_DIR, '__covers');
   if (!fs.existsSync(coversDir)) fs.mkdirSync(coversDir, { recursive: true });
-  console.log('Data dir set to:', dir);
+  // Wire the logger to userData/logs/ so we keep a persistent trace across
+  // runs. Pretty-print to stderr in dev, JSON-only on disk otherwise.
+  log = setLogConfig({
+    dir: path.join(DATA_DIR, 'logs'),
+    level: (config && config.logLevel) || 'info',
+    pretty: !!(config && config.devMode),
+    name: 'server',
+  });
+  log.info('data dir set', { dir });
 }
 
 // ─── Auth Token (LAN access) ────────────────────────────────────────────────
@@ -247,8 +258,9 @@ async function parseTrackMetadata(filePath) {
 }
 
 async function scanFolders() {
-  if (scanning) { console.log('Scan already in progress, skipping'); return library; }
+  if (scanning) { log.info('scan skipped — already in progress'); return library; }
   scanning = true;
+  const scanStartedAt = Date.now();
 
   // Reload config (may have been updated via settings)
   config = loadConfig();
@@ -259,13 +271,13 @@ async function scanFolders() {
     const pool = new ScannerPool();
     if (pool.start()) {
       scannerPool = pool;
-      console.log(`Scanner pool started (${pool.size} workers)`);
+      log.info('scanner pool started', { workers: pool.size });
     }
   }
 
   const excludeFolders = new Set((config.excludeFolders || []).map(f => f.toLowerCase()));
 
-  console.log('Scanning music folders...');
+  log.info('scan starting', { folders: config.musicFolders, useWorker: !!scannerPool });
   broadcast({ type: 'scan:start' });
   library = [];
   genres = new Set();
@@ -309,7 +321,11 @@ async function scanFolders() {
 
   scanning = false;
   const count = library.filter(Boolean).length;
-  console.log(`Found ${count} tracks, ${genres.size} genres`);
+  log.info('scan done', {
+    tracks: count,
+    genres: genres.size,
+    durationMs: Date.now() - scanStartedAt,
+  });
   broadcast({ type: 'scan:done', data: { count, genres: genres.size } });
   return library;
 }
@@ -571,6 +587,25 @@ function startServer(port) {
     });
 
     app.use(express.json({ limit: '10mb' }));
+
+    // Request logger — concise, only the path + status + duration. Skips
+    // /api/stream/ and /api/cover/ so we don't drown in media noise.
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api/stream/') || req.path.startsWith('/api/cover/')) {
+        return next();
+      }
+      const startedAt = Date.now();
+      res.on('finish', () => {
+        log.debug('http', {
+          method: req.method,
+          path: req.path,
+          status: res.statusCode,
+          ms: Date.now() - startedAt,
+        });
+      });
+      next();
+    });
+
     app.use(express.static(path.join(__dirname, 'public')));
 
     // ─── Auth ────────────────────────────────────────────────────────────────
@@ -1150,6 +1185,82 @@ function startServer(port) {
       res.json({ groups });
     });
 
+    // ─── Dev-only endpoints ────────────────────────────────────────────────
+    // Gated behind `config.devMode` so they're invisible in normal builds.
+    // Surface enough info to debug a flaky scan / weird state without firing
+    // up devtools on the renderer.
+    function devOnly(req, res, next) {
+      if (!config || !config.devMode) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      next();
+    }
+
+    app.get('/api/_dev/health', (req, res) => {
+      res.json({
+        ok: true,
+        version: require('./package.json').version,
+        uptime: Math.floor((Date.now() - serverStartTime) / 1000),
+        scanning,
+        library: trackCount(),
+        queue: queue.length,
+        clients: clients.size,
+        memory: process.memoryUsage(),
+        node: process.version,
+        platform: process.platform,
+        devMode: !!(config && config.devMode),
+      });
+    });
+
+    app.get('/api/_dev/log-tail', devOnly, (req, res) => {
+      const n = Math.min(parseInt(req.query.n) || 100, 500);
+      res.json({ entries: log.tail(n), level: log.getLevel() });
+    });
+
+    app.post('/api/_dev/log-level', devOnly, (req, res) => {
+      const { level } = req.body || {};
+      if (!level || typeof level !== 'string') {
+        return res.status(400).json({ error: 'level required' });
+      }
+      log.setLevel(level);
+      log.info('log level changed', { level });
+      res.json({ ok: true, level: log.getLevel() });
+    });
+
+    app.get('/api/_dev/state-dump', devOnly, (req, res) => {
+      res.json({
+        config,
+        libraryCount: trackCount(),
+        genres: [...genres],
+        playlists: playlists.map(p => ({ id: p.id, name: p.name, type: p.type, count: (p.trackIds || []).length })),
+        queue: queue.slice(0, 20),
+        currentIndex,
+        isPlaying,
+        scanning,
+        clientsConnected: clients.size,
+      });
+    });
+
+    app.post('/api/_dev/library/seed', devOnly, (req, res) => {
+      const count = Math.min(parseInt((req.body && req.body.count)) || 200, 5000);
+      const seed = parseInt((req.body && req.body.seed)) || 1;
+      library = buildMockLibrary({ count, seed });
+      genres = buildMockGenres(library);
+      log.info('mock library seeded', { count, seed });
+      broadcast({ type: 'library-updated', data: { count: trackCount() } });
+      res.json({ ok: true, count: trackCount(), genres: genres.size });
+    });
+
+    app.post('/api/_dev/library/clear', devOnly, (req, res) => {
+      library = [];
+      genres = new Set();
+      queue = [];
+      currentIndex = 0;
+      log.info('library cleared (dev)');
+      broadcast({ type: 'library-updated', data: { count: 0 } });
+      res.json({ ok: true });
+    });
+
     // Theme (for mobile to sync accent color)
     app.get('/api/config/theme', (req, res) => {
       res.json({ hue: config.hue || 38 });
@@ -1218,7 +1329,12 @@ function startServer(port) {
     serverInstance = app.listen(usePort, bindAddr, () => {
       const lanIp = getLanIp();
       const actualPort = serverInstance.address().port;
-      console.log(`Ghetto Blaster server started on ${bindAddr}:${actualPort} (LAN: ${bindAddr === '0.0.0.0' ? 'ON' : 'OFF'})`);
+      log.info('server started', {
+        bind: bindAddr,
+        port: actualPort,
+        lan: bindAddr === '0.0.0.0',
+        lanIp,
+      });
 
       // WebSocket + connected users tracking
       wssInstance = new WebSocketServer({ server: serverInstance, maxPayload: 2048 });
@@ -1377,7 +1493,7 @@ function stopServer() {
     if (serverInstance) {
       serverInstance.close(() => {
         serverInstance = null;
-        console.log('Ghetto Blaster server stopped');
+        log.info('server stopped');
         resolve();
       });
     } else {
