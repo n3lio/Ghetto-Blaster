@@ -1008,3 +1008,87 @@ html[data-theme="auto"] .onboarding-card {
   border-color: var(--accent-hover);
   color: var(--accent-hover);
 }
+
+/* ─── v3.14: Settings extras (theme/sleep timer/backups) ─────────────────── */
+#settingsExtras .settings-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+#settingsExtras .settings-section h3 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 12px;
+}
+#settingsExtras .settings-row {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+}
+#settingsExtras .settings-row label { flex: 0 0 90px; font-size: 0.85rem; color: var(--text-dim); }
+#settingsExtras .settings-row select,
+#settingsExtras .settings-row input {
+  flex: 1; max-width: 280px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 10px; font: inherit;
+}
+#settingsExtras .settings-hint { font-size: 0.75rem; color: var(--text-dim); margin: 6px 0 0; }
+#settingsExtras .sleep-timer-row {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+#settingsExtras .sleep-preset,
+#settingsExtras .sleep-cancel,
+#settingsExtras .backups-actions button {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 12px; font: inherit; cursor: pointer;
+}
+#settingsExtras .sleep-preset:hover,
+#settingsExtras .sleep-cancel:hover { border-color: var(--accent); color: var(--accent); }
+#settingsExtras .sleep-cancel { color: var(--text-dim); }
+#settingsExtras #sleepCustomMin { width: 110px; }
+#settingsExtras .backups-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+#settingsExtras .backups-list { max-height: 220px; overflow-y: auto; }
+#settingsExtras .backup-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+#settingsExtras .backup-row:last-child { border-bottom: none; }
+#settingsExtras .backup-date { font-family: ui-monospace, monospace; }
+#settingsExtras .backup-files { flex: 1; color: var(--text-dim); font-size: 0.78rem; }
+#settingsExtras .backup-restore {
+  background: transparent; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: var(--radius-sm); padding: 4px 10px; cursor: pointer; font: inherit;
+}
+#settingsExtras .backup-restore:hover { background: var(--accent-subtle); }
+
+/* ─── Radio button on Now Playing ───────────────────────────────────────── */
+.np-radio-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: transparent; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: var(--radius-sm); padding: 4px 10px; font-size: 0.78rem;
+  font-family: var(--font); cursor: pointer; margin-top: 8px;
+  transition: background 0.15s ease;
+}
+.np-radio-btn:hover { background: var(--accent-subtle); }
+
+/* ─── Guest badge ───────────────────────────────────────────────────────── */
+.guest-badge {
+  display: inline-block;
+  background: var(--purple-subtle); color: var(--purple);
+  border: 1px solid var(--purple); border-radius: 4px;
+  padding: 2px 8px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em;
+  margin-right: 8px; align-self: center;
+}
+
+/* ─── Devices tab: role toggle button ───────────────────────────────────── */
+.role-toggle {
+  background: transparent; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 3px 10px; font: inherit; font-size: 0.75rem; cursor: pointer;
+  margin-left: 8px;
+}
+.role-toggle:hover { color: var(--accent); border-color: var(--accent); }

@@ -83,25 +83,126 @@ class Visualizer {
     };
   }
 
-  // Extract dominant colors from cover image
+  // Extract dominant colors from a cover image. Two passes:
+  //  1. Sample 32×32 thumbnail, drop transparent / near-white / near-black
+  //     pixels.
+  //  2. Bucket the survivors by hue (12 slots of 30°). Score each bucket by
+  //     count × max-saturation so a small but vivid pop of red beats a big
+  //     muddy beige patch. Pick the two top-scoring buckets that aren't
+  //     adjacent (so we don't return two near-identical reds).
+  // The returned RGB pair gets a saturation/lightness boost so the result
+  // reads "punchy" on a black background — playlists with album art that's
+  // already quite muted (lo-fi, ambient) used to come out grey/desaturated.
   setCoverColors(coverUrl) {
     if (!coverUrl) { this.coverColors = null; return; }
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      const SIZE = 32;
       const c = document.createElement('canvas');
-      c.width = 8; c.height = 8;
+      c.width = SIZE; c.height = SIZE;
       const cx = c.getContext('2d');
-      cx.drawImage(img, 0, 0, 8, 8);
-      const data = cx.getImageData(0, 0, 8, 8).data;
-      const samples = [0, 7, 56, 63, 27, 36];
-      const colors = samples.map(i => {
-        const idx = i * 4;
-        return [data[idx], data[idx+1], data[idx+2]];
-      }).filter(c => (c[0]+c[1]+c[2]) > 30 && (c[0]+c[1]+c[2]) < 720);
-      this.coverColors = colors.length >= 2 ? colors : null;
+      try { cx.drawImage(img, 0, 0, SIZE, SIZE); }
+      catch (e) { this.coverColors = null; return; }
+      let data;
+      try { data = cx.getImageData(0, 0, SIZE, SIZE).data; }
+      catch (e) { this.coverColors = null; return; }
+
+      const BUCKETS = 12; // 30° hue slices
+      const buckets = Array.from({ length: BUCKETS }, () => ({
+        count: 0, sumR: 0, sumG: 0, sumB: 0, maxSat: 0,
+      }));
+      let neutralR = 0, neutralG = 0, neutralB = 0, neutralN = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+        if (a < 200) continue;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        const l = (max + min) / 510; // 0..1
+        if (l < 0.08 || l > 0.92) continue; // skip near-black / near-white
+        const d = max - min;
+        const sat = max === 0 ? 0 : d / max; // 0..1 (HSV-ish)
+        if (sat < 0.18) {
+          // Save the neutral so we can fall back if nothing saturated emerges.
+          neutralR += r; neutralG += g; neutralB += b; neutralN++;
+          continue;
+        }
+        // Hue (0..360)
+        let h = 0;
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h *= 60; if (h < 0) h += 360;
+        const bucket = Math.floor(h / (360 / BUCKETS)) % BUCKETS;
+        const slot = buckets[bucket];
+        slot.count++;
+        slot.sumR += r; slot.sumG += g; slot.sumB += b;
+        if (sat > slot.maxSat) slot.maxSat = sat;
+      }
+
+      // Score each bucket by count * sqrt(maxSat) so vibrant minorities still
+      // beat dull majorities.
+      const scored = buckets.map((s, idx) => ({
+        idx,
+        score: s.count > 0 ? s.count * Math.sqrt(s.maxSat) : 0,
+        avg: s.count > 0 ? [s.sumR / s.count, s.sumG / s.count, s.sumB / s.count] : null,
+      })).filter(x => x.avg).sort((a, b) => b.score - a.score);
+
+      const out = [];
+      for (const cand of scored) {
+        // Avoid picking two adjacent buckets — they're almost the same hue.
+        if (out.every(o => Math.abs(o.idx - cand.idx) > 1
+            && Math.abs(o.idx - cand.idx) < BUCKETS - 1)) {
+          out.push(cand);
+        }
+        if (out.length >= 2) break;
+      }
+
+      // Pump up the saturation so the canvas glow actually pops.
+      const punch = (rgb) => this._punchSaturation(rgb, 0.7, 0.55);
+      const punched = out.map(o => punch(o.avg));
+
+      // Fallback: not enough vivid colors — use the neutral average + its
+      // complement so we still get some contrast instead of two greys.
+      if (punched.length < 2) {
+        if (neutralN > 0) {
+          const navg = [neutralR / neutralN, neutralG / neutralN, neutralB / neutralN];
+          punched.push(punch(navg));
+          if (punched.length < 2) {
+            // Synthesize a complement.
+            punched.push([255 - navg[0] | 0, 255 - navg[1] | 0, 255 - navg[2] | 0]);
+          }
+        } else {
+          this.coverColors = null;
+          return;
+        }
+      }
+      this.coverColors = punched;
     };
+    img.onerror = () => { this.coverColors = null; };
     img.src = coverUrl;
+  }
+
+  // Bumps saturation toward `targetSat` and lightness toward `targetL`, so
+  // pulled-from-cover colors don't look grey on a black canvas.
+  _punchSaturation(rgb, targetSat, targetL) {
+    const r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    let h = 0, s = 0;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        default: h = (r - g) / d + 4;
+      }
+      h /= 6;
+    }
+    const newS = Math.max(s, targetSat);
+    const newL = (l < 0.25 || l > 0.75) ? targetL : l;
+    return this.hslToRgb(h, newS, newL);
   }
 
   clear() { this.ctx.clearRect(0, 0, this.w, this.h); }
@@ -204,20 +305,28 @@ class Visualizer {
     }
     if (bass > 0.6) { ctx.fillStyle = this.rgba(colors.c1, (bass - 0.6) * 0.2); ctx.fillRect(0, 0, w, h); }
 
-    // Wave overlay with colored glow
+    // Wave overlay with colored glow. Layers tuned so the halo is as
+    // present as the standalone Wave visualizer (was lw*4 → lw*6, plus a
+    // beefier outer glow line). Also fixes a missing moveTo on i===0
+    // which was leaving a tiny artifact at the canvas left edge.
     if (dataArray) {
       const waveLayers = [
-        { lw: 6, alpha: 0.08 + bass * 0.12, c: colors.c1 },
-        { lw: 2.5, alpha: 0.3 + bass * 0.4, c: colors.c2 },
-        { lw: 1.2, alpha: 0.6 + bass * 0.4, c: null },
+        { lw: 12, alpha: 0.07 + bass * 0.18, c: colors.c1 }, // outer halo
+        { lw: 5, alpha: 0.25 + bass * 0.4, c: colors.c2 },   // mid glow
+        { lw: 2, alpha: 0.6 + bass * 0.4, c: null },         // crisp line
       ];
       waveLayers.forEach(({ lw, alpha, c }) => {
         ctx.beginPath(); ctx.lineWidth = lw;
         ctx.strokeStyle = c ? this.rgba(c, alpha) : 'rgba(240,235,228,' + alpha + ')';
-        ctx.shadowColor = c ? this.rgba(c, 0.3 + bass * 0.5) : this.rgba(colors.c1, 0.2 + bass * 0.3);
-        ctx.shadowBlur = lw * 4;
+        ctx.shadowColor = c ? this.rgba(c, 0.4 + bass * 0.5) : this.rgba(colors.c1, 0.35 + bass * 0.4);
+        ctx.shadowBlur = lw * 6;
         const sl = w / dataArray.length; let x = 0;
-        for (let i = 0; i < dataArray.length; i++) { const v = dataArray[i] / 128; ctx.lineTo(x, (v * h) / 2); x += sl; }
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = dataArray[i] / 128;
+          if (i === 0) ctx.moveTo(x, (v * h) / 2);
+          else ctx.lineTo(x, (v * h) / 2);
+          x += sl;
+        }
         ctx.stroke();
       });
       ctx.shadowBlur = 0;

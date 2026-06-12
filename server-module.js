@@ -15,7 +15,6 @@ const { buildMockLibrary, buildMockGenres } = require('./lib/mock-library');
 const migrations = require('./lib/migrations');
 const backupLib = require('./lib/backup');
 const m3u = require('./lib/m3u');
-const tagWriter = require('./lib/tag-writer');
 const lyricsLib = require('./lib/lyrics');
 const multitag = require('./lib/multitag');
 const radio = require('./lib/radio');
@@ -964,22 +963,24 @@ function startServer(port) {
     // Remote commands (mobile → desktop via WS broadcast)
     // Whitelist of accepted commands — drops anything unexpected so a
     // misbehaving client can't trick the desktop into running random ops.
-    const REMOTE_COMMANDS = new Set([
-      'play', 'pause', 'next', 'prev', 'shuffle', 'seek', 'volume', 'mute',
-      'play-track', 'play-playlist', 'queue-add', 'queue-set', 'queue-remove',
-      'queue-clear', 'queue-reorder', 'set-output', 'rescan', 'set-eq',
-      'set-crossfade', 'toggle-favorite', 'set-viz',
-    ]);
+    // Guests get a stricter subset (queue suggestions only).
     app.post('/api/remote/command', remoteLimiter, (req, res) => {
       const body = req.body || {};
       const { command } = body;
       if (!command || typeof command !== 'string') {
         return res.status(400).json({ error: 'command required' });
       }
-      if (!REMOTE_COMMANDS.has(command)) {
+      if (!validation.REMOTE_COMMANDS.has(command)) {
         return res.status(400).json({ error: 'unknown command' });
       }
-      // Broadcast entire payload (command + trackId/playlistId/etc.)
+      // Optional clientId in the body lets us check the sender's role.
+      // No clientId → treated as full (backward compat with localhost
+      // renderer + old mobile clients that don't send one).
+      const clientId = body.clientId || null;
+      const sender = clientId ? findUserById(clientId) : null;
+      if (sender && sender.role === 'guest' && !validation.GUEST_COMMANDS.has(command)) {
+        return res.status(403).json({ error: 'guest cannot run this command', command });
+      }
       broadcast({ type: 'remote:command', data: body });
       res.json({ ok: true });
     });
@@ -1235,36 +1236,8 @@ function startServer(port) {
       res.send(lines.join('\n') + '\n');
     });
 
-    // ─── Tag editing ────────────────────────────────────────────────────────
-    // MP3-only first cut via node-id3. FLAC/M4A/Vorbis return 501 with a
-    // format hint so the UI can show a helpful message instead of a generic
-    // failure.
-    app.put('/api/tracks/:id/tags', (req, res) => {
-      const track = getTrackById(req.params.id);
-      if (!track) return res.status(404).json({ error: 'Track not found' });
-      if (!tagWriter.isAvailable()) {
-        return res.status(501).json({ error: 'tag editing dependency missing (node-id3)' });
-      }
-      const valid = tagWriter.pickValidFields(req.body || {});
-      if (Object.keys(valid).length === 0) {
-        return res.status(400).json({ error: 'no valid fields provided', accepted: [...tagWriter.SUPPORTED_FIELDS] });
-      }
-      const result = tagWriter.writeTags(track.path, valid);
-      if (!result.ok) {
-        // Format-not-supported → 501; other failures → 500.
-        const status = (result.format && result.format !== 'mp3') ? 501 : 500;
-        return res.status(status).json(result);
-      }
-      // Mirror the changes into our in-memory library so the UI sees them
-      // before the next rescan.
-      for (const k of Object.keys(valid)) {
-        if (k === 'year') track.year = parseInt(valid.year, 10) || track.year;
-        else track[k] = valid[k];
-      }
-      log.info('tags written', { trackId: track.id, fields: Object.keys(valid) });
-      broadcast({ type: 'library-updated', data: { count: trackCount() } });
-      res.json({ ok: true, written: valid });
-    });
+    // (Tag editing endpoint removed in v3.14.0 — n3lio uses Mp3tag for
+    // metadata edits, no point shipping node-id3 + an unused UI surface.)
 
     // ─── Duplicate cleanup helper (preview only — never deletes files) ─────
     // Returns which files we'd remove to dedupe, but the actual unlink is
@@ -1659,10 +1632,40 @@ function startServer(port) {
     }
     var serverStartTime = Date.now();
 
+    function findUserById(id) {
+      for (const u of connectedUsers.values()) {
+        if (u.id === id) return u;
+      }
+      return null;
+    }
+
     app.get('/api/users', (req, res) => {
       const users = [];
-      connectedUsers.forEach((u) => users.push({ id: u.id, name: u.name, connectedAt: u.connectedAt }));
+      connectedUsers.forEach((u) => users.push({
+        id: u.id,
+        name: u.name,
+        connectedAt: u.connectedAt,
+        role: u.role || 'full',
+      }));
       res.json(users);
+    });
+
+    // Promote/demote a connected device. Role persists for the lifetime of
+    // the WS session — if the device reconnects, it comes back as 'full'
+    // and the host can re-downgrade.
+    app.post('/api/users/:userId/role', (req, res) => {
+      const { role } = req.body || {};
+      if (role !== 'guest' && role !== 'full') {
+        return res.status(400).json({ error: 'role must be "guest" or "full"' });
+      }
+      const user = findUserById(req.params.userId);
+      if (!user) return res.status(404).json({ error: 'user not connected' });
+      user.role = role;
+      log.info('user role changed', { id: user.id, name: user.name, role });
+      // Tell every client (so the host UI updates instantly) and the
+      // affected device (so it can show a "Guest mode" badge).
+      broadcast({ type: 'users:changed', data: { count: connectedUsers.size } });
+      res.json({ ok: true, id: user.id, role });
     });
 
     app.get('/api/server/stats', (req, res) => {
@@ -1727,8 +1730,17 @@ function startServer(port) {
         userCounter++;
         const userId = 'user-' + userCounter;
         trackUniqueIp(ip);
-        connectedUsers.set(ws, { id: userId, name: 'Device ' + userCounter, ip: ip, connectedAt: new Date().toISOString() });
+        connectedUsers.set(ws, {
+          id: userId,
+          name: 'Device ' + userCounter,
+          ip: ip,
+          connectedAt: new Date().toISOString(),
+          role: 'full', // every new device starts with full powers
+        });
 
+        // Tell the device its own id so it can stamp /api/remote/command
+        // with `clientId` and the server can check its role.
+        ws.send(JSON.stringify({ type: 'whoami', data: { id: userId } }));
         ws.send(JSON.stringify({ type: 'state', data: getState() }));
         broadcast({ type: 'users:changed', data: { count: connectedUsers.size } });
 

@@ -1001,3 +1001,337 @@ if ('serviceWorker' in navigator && !window.resonance) {
 //  saved target after a fade-in, so the safety net was unneeded and harmful
 //  in edge cases. If pause mid-fade leaves audio.volume low, hitting play
 //  resumes the fade-in correctly.)
+
+// ─── Settings extras (v3.14): theme, sleep timer, backups, radio button ────
+// All injected lazily into #settingsExtras the first time the modal opens,
+// so we don't have to touch the legacy settings markup. Each section is
+// independent and degrades gracefully if its endpoint is missing.
+(function setupSettingsExtras() {
+  if (typeof document === 'undefined') return;
+  var settingsBtn = document.getElementById('settingsBtn');
+  var extras = document.getElementById('settingsExtras');
+  if (!settingsBtn || !extras) return;
+  var injected = false;
+
+  function injectMarkup() {
+    if (injected) return;
+    injected = true;
+    extras.innerHTML = ''
+      + '<div class="settings-section"><h3>Theme</h3>'
+      +   '<div class="settings-row">'
+      +     '<label>Mode</label>'
+      +     '<select id="settingsThemeMode">'
+      +       '<option value="auto">Auto (follow OS)</option>'
+      +       '<option value="dark">Dark</option>'
+      +       '<option value="light">Light</option>'
+      +     '</select>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="settings-section"><h3>Sleep timer</h3>'
+      +   '<div class="sleep-timer-row">'
+      +     '<button class="sleep-preset" data-min="15">15 min</button>'
+      +     '<button class="sleep-preset" data-min="30">30 min</button>'
+      +     '<button class="sleep-preset" data-min="60">1 h</button>'
+      +     '<button class="sleep-preset" data-min="90">1 h 30</button>'
+      +     '<input type="number" min="1" max="1440" id="sleepCustomMin" placeholder="custom (min)">'
+      +     '<button id="sleepCancelBtn" class="sleep-cancel">Cancel</button>'
+      +   '</div>'
+      +   '<p id="sleepTimerStatus" class="settings-hint">No timer set</p>'
+      + '</div>'
+      + '<div class="settings-section"><h3>Backups</h3>'
+      +   '<p class="settings-hint">Daily snapshot of your playlists, history, favorites, and config (kept 7 days).</p>'
+      +   '<div class="backups-actions">'
+      +     '<button id="backupNowBtn">Snapshot now</button>'
+      +     '<button id="backupRefreshBtn">Refresh list</button>'
+      +   '</div>'
+      +   '<div id="backupsList" class="backups-list"></div>'
+      + '</div>';
+
+    bindTheme();
+    bindSleepTimer();
+    bindBackups();
+  }
+
+  settingsBtn.addEventListener('click', function() {
+    injectMarkup();
+    refreshSleepStatus();
+    refreshBackups();
+    syncTheme();
+  });
+
+  // ─── Theme ────────────────────────────────────────────────────────────
+  function syncTheme() {
+    var sel = document.getElementById('settingsThemeMode');
+    if (!sel) return;
+    var current = (window._appConfig && window._appConfig.theme)
+      || document.documentElement.dataset.theme || 'auto';
+    sel.value = current;
+  }
+  function bindTheme() {
+    var sel = document.getElementById('settingsThemeMode');
+    if (!sel) return;
+    sel.addEventListener('change', function() {
+      if (typeof window.setTheme === 'function') window.setTheme(sel.value);
+    });
+  }
+
+  // ─── Sleep timer ──────────────────────────────────────────────────────
+  function refreshSleepStatus() {
+    var status = document.getElementById('sleepTimerStatus');
+    if (!status) return;
+    fetch('/api/sleep-timer').then(function(r) { return r.json(); }).then(function(s) {
+      if (!s.active) { status.textContent = 'No timer set'; return; }
+      var mins = Math.ceil(s.msRemaining / 60000);
+      status.textContent = 'Pausing in ~' + mins + ' min (at '
+        + new Date(s.endsAt).toLocaleTimeString() + ')';
+    }).catch(function() {});
+  }
+  function startSleep(minutes) {
+    fetch('/api/sleep-timer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ minutes: minutes }),
+    }).then(refreshSleepStatus);
+  }
+  function bindSleepTimer() {
+    document.querySelectorAll('.sleep-preset').forEach(function(btn) {
+      btn.addEventListener('click', function() { startSleep(parseInt(btn.dataset.min, 10)); });
+    });
+    var custom = document.getElementById('sleepCustomMin');
+    if (custom) {
+      custom.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          var v = parseInt(custom.value, 10);
+          if (Number.isFinite(v) && v > 0) { startSleep(v); custom.value = ''; }
+        }
+      });
+    }
+    var cancel = document.getElementById('sleepCancelBtn');
+    if (cancel) {
+      cancel.addEventListener('click', function() {
+        fetch('/api/sleep-timer', { method: 'DELETE' }).then(refreshSleepStatus);
+      });
+    }
+    // Listen for the server's sleep-timer broadcast so the status auto-updates.
+    if (window.ws && typeof window.ws.addEventListener === 'function') {
+      window.ws.addEventListener('message', function(ev) {
+        try {
+          var msg = JSON.parse(ev.data);
+          if (msg.type === 'sleep-timer') refreshSleepStatus();
+        } catch (e) {}
+      });
+    }
+  }
+
+  // ─── Backups ──────────────────────────────────────────────────────────
+  function refreshBackups() {
+    var list = document.getElementById('backupsList');
+    if (!list) return;
+    fetch('/api/backups').then(function(r) { return r.json(); }).then(function(d) {
+      var arr = (d && d.backups) || [];
+      if (arr.length === 0) {
+        list.innerHTML = '<p class="settings-hint">No backups yet — one is created automatically each day.</p>';
+        return;
+      }
+      list.innerHTML = arr.map(function(b) {
+        return '<div class="backup-row">'
+          + '<span class="backup-date">' + b.date + '</span>'
+          + '<span class="backup-files">' + (b.files || []).length + ' files</span>'
+          + '<button class="backup-restore" data-date="' + b.date + '">Restore</button>'
+          + '</div>';
+      }).join('');
+      list.querySelectorAll('.backup-restore').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var date = btn.dataset.date;
+          if (!confirm('Restore backup from ' + date + '? Current files are kept aside as .before-restore.')) return;
+          fetch('/api/backups/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: date }),
+          }).then(function(r) { return r.json(); }).then(function(res) {
+            if (res.ok) { showToast('Restored from ' + date + ' — reload the app.'); }
+            else { showToast('Restore failed: ' + (res.error || 'unknown')); }
+          });
+        });
+      });
+    }).catch(function(e) { console.warn('[gb] backups fetch failed:', e && e.message); });
+  }
+  function bindBackups() {
+    var snap = document.getElementById('backupNowBtn');
+    var refresh = document.getElementById('backupRefreshBtn');
+    if (snap) snap.addEventListener('click', function() {
+      fetch('/api/backups', { method: 'POST' }).then(refreshBackups);
+    });
+    if (refresh) refresh.addEventListener('click', refreshBackups);
+  }
+})();
+
+// ─── Radio mode trigger (button on Now Playing + context) ─────────────────
+// Adds a "Start radio" button next to the current track info in Now Playing.
+// On click, posts /api/radio/play which replaces the queue with a similar-
+// tracks queue scored by lib/radio.js (genre, artist, year, album-artist).
+(function setupRadioButton() {
+  if (typeof document === 'undefined') return;
+  var meta = document.getElementById('npTrackMeta');
+  if (!meta) return;
+
+  var btn = document.createElement('button');
+  btn.id = 'startRadioBtn';
+  btn.className = 'np-radio-btn';
+  btn.title = 'Start a radio queue from this track';
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M3.24 6.15a2 2 0 00-.97 1.71v12.04a2 2 0 002 2h15.46a2 2 0 002-2V7.86a2 2 0 00-2-2H8.66l8.42-3.42a1 1 0 00-.74-1.86L3.83 5.85a2 2 0 00-.59.3zm14.39 13.5a3.5 3.5 0 11-1-6.85 3.5 3.5 0 011 6.85z"/></svg> Radio';
+  btn.style.display = 'none';
+  meta.parentElement.appendChild(btn);
+
+  function currentTrackId() {
+    if (typeof window.queue !== 'undefined' && Array.isArray(window.queue)
+        && typeof window.currentIndex === 'number') {
+      return window.queue[window.currentIndex];
+    }
+    return null;
+  }
+
+  function refresh() {
+    var id = currentTrackId();
+    btn.style.display = (id != null) ? 'inline-flex' : 'none';
+  }
+
+  btn.addEventListener('click', function() {
+    var id = currentTrackId();
+    if (id == null) return;
+    fetch('/api/radio/play', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackId: id, limit: 50 }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.ok) {
+        showToast('Radio queue: ' + d.length + ' tracks');
+      } else {
+        showToast('Could not start radio: ' + (d.error || 'unknown'));
+      }
+    }).catch(function() {});
+  });
+
+  // The button visibility tracks the currentIndex changes — poll cheap and
+  // sometimes (the canonical state mutates from many places, hooking into
+  // each is fragile).
+  setInterval(refresh, 1000);
+})();
+
+// ─── Mode guest: track our own clientId, expose role badge, send clientId ──
+// The server pushes a `whoami` message right after the WS handshake. We
+// remember our id so we can stamp every /api/remote/command with it (the
+// server uses it to look up our role).
+(function setupGuestMode() {
+  if (typeof window === 'undefined') return;
+  window.gbClientId = null;
+
+  // Hook an MO observer for the WS that the legacy code creates — easier
+  // than refactoring base.js. We just listen to the DOM for now-playing
+  // updates, but the actual whoami arrives over WS.
+  // The legacy WS instance is stored in `window.ws` after init() in base.js.
+  function attachWhoami() {
+    var ws = window.ws;
+    if (!ws || ws._whoamiHooked) return;
+    ws._whoamiHooked = true;
+    ws.addEventListener('message', function(ev) {
+      try {
+        var msg = JSON.parse(ev.data);
+        if (msg.type === 'whoami' && msg.data && msg.data.id) {
+          window.gbClientId = msg.data.id;
+        }
+        if (msg.type === 'users:changed') refreshGuestBadge();
+      } catch (e) {}
+    });
+  }
+  setInterval(attachWhoami, 500);
+
+  // Wrap fetch so any POST to /api/remote/command auto-stamps clientId. We
+  // restore the original fetch on cleanup but in practice this lives for
+  // the page lifetime.
+  var originalFetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    try {
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (url.indexOf('/api/remote/command') !== -1
+          && init && init.method && init.method.toUpperCase() === 'POST'
+          && init.body && typeof init.body === 'string'
+          && window.gbClientId) {
+        try {
+          var parsed = JSON.parse(init.body);
+          if (parsed && typeof parsed === 'object' && !parsed.clientId) {
+            parsed.clientId = window.gbClientId;
+            init = Object.assign({}, init, { body: JSON.stringify(parsed) });
+          }
+        } catch (e) { /* not JSON, ignore */ }
+      }
+    } catch (e) {}
+    return originalFetch(input, init);
+  };
+
+  function refreshGuestBadge() {
+    if (!window.gbClientId) return;
+    fetch('/api/users').then(function(r) { return r.json(); }).then(function(users) {
+      var me = users.find(function(u) { return u.id === window.gbClientId; });
+      var existing = document.getElementById('guestBadge');
+      if (me && me.role === 'guest') {
+        if (!existing) {
+          var b = document.createElement('span');
+          b.id = 'guestBadge';
+          b.className = 'guest-badge';
+          b.title = 'You can only suggest tracks — the host limited your access.';
+          b.textContent = 'GUEST';
+          var hr = document.querySelector('.header-right');
+          if (hr) hr.insertBefore(b, hr.firstChild);
+        }
+      } else if (existing) {
+        existing.remove();
+      }
+    }).catch(function() {});
+  }
+})();
+
+// ─── Mode guest: role buttons in the Devices tab ──────────────────────────
+// Augments each row in #usersList with "Make guest" / "Restore full access"
+// when the host is looking at the Devices panel.
+(function setupDeviceRoles() {
+  if (typeof document === 'undefined') return;
+  var panel = document.getElementById('panel-devices');
+  if (!panel) return;
+
+  function decorate() {
+    var users = panel.querySelectorAll('[data-user-id]');
+    if (users.length === 0) return;
+    users.forEach(function(row) {
+      if (row.querySelector('.role-toggle')) return;
+      var id = row.dataset.userId;
+      var role = row.dataset.role || 'full';
+      var btn = document.createElement('button');
+      btn.className = 'role-toggle';
+      btn.textContent = role === 'guest' ? 'Restore full access' : 'Make guest';
+      btn.addEventListener('click', function() {
+        var newRole = role === 'guest' ? 'full' : 'guest';
+        fetch('/api/users/' + id + '/role', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: newRole }),
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.ok) {
+            // Re-fetch the list so role is re-rendered consistently.
+            if (typeof window.fetchUsers === 'function') window.fetchUsers();
+          }
+        });
+      });
+      row.appendChild(btn);
+    });
+  }
+
+  // Re-decorate on each render of the Devices list. The legacy fetchUsers()
+  // rebuilds the inner HTML; we observe and patch.
+  if (typeof MutationObserver !== 'undefined') {
+    var obs = new MutationObserver(decorate);
+    var list = document.getElementById('usersList');
+    if (list) obs.observe(list, { childList: true, subtree: true });
+  }
+  setInterval(decorate, 2000); // safety net for env without MO
+})();
