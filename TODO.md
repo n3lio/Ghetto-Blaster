@@ -84,7 +84,7 @@
 - [x] ~~**Drag & drop fichiers/dossiers sur la fenêtre**~~ *(P2)* — drop dossiers (ou fichiers, on remonte au parent) → ajout à `musicFolders` + rescan auto. preload expose `dropPath` via `webUtils.getPathForFile`.
 - [ ] **Vue "Year"** *(P3)* — frise chronologique des albums.
 - [ ] **Vue "Genres" rich** *(P3)* — pas juste un filtre, une vraie page d'exploration.
-- [ ] **Recherche : opérateurs** *(P3)* — `artist:NTM`, `genre:rap`, `year:2010..2015`.
+- [x] ~~**Recherche : opérateurs**~~ *(P3)* — `lib/query.js` parse `artist:`, `album:`, `genre:`, `title:`, `year:YYYY` ou `year:YYYY..YYYY`, quoted values, multi-valeurs OR. 12 tests. Wired sur `/api/tracks?q=...`.
 - [x] ~~**Mode mini-player**~~ *(P2)* — fenêtre Electron + `body.mini` CSS layout compact (cover 56px + info + transport + progress full-width). Toggle via tray menu ou IPC `miniplayer:toggle`.
 - [ ] **Onboarding première utilisation** *(P2)* — petit tour guidé après install.
 - [x] ~~**Drag & drop reorder de la queue**~~ *(P2)* — handlers dragstart/dragover/drop sur `.track-item`, MutationObserver pour rearmer après render, push `/api/queue` après reorder. Mobile reste sur le menu long-press existant.
@@ -105,7 +105,7 @@
 - [x] ~~**Tags multiples par track**~~ *(P2)* — `lib/multitag.js` calcule `track.artists[]` et `track.genres[]` au scan (séparateurs : `,`, `;`, `feat.`, `ft.`, `with`, `vs`, `x`, `/`, `·`, `×`, `|`). String original conservé.
 - [x] ~~**Détection des doublons**~~ *(P2)* — `/api/duplicates` et `/api/duplicates/preview` (groupes par titre+artiste+durée arrondie).
 - [x] ~~**Statistiques par dossier**~~ *(P3)* — `GET /api/stats/folders` renvoie tracks count par folder + unrooted.
-- [ ] **Historique illimité avec pagination** *(P3)* — actuellement cap à 5000.
+- [x] ~~**Historique pagination**~~ *(P3)* — `/api/history/recent?offset&limit` (limit max 500) + `X-Total-Count`. Cap à 5000 conservé pour la persistance.
 - [x] ~~**Export bibliothèque (CSV/JSON)**~~ *(P2)* — `GET /api/library/export.{json,csv}` (RFC 4180 escape pour CSV).
 - [x] ~~**Import M3U / M3U8**~~ *(P2)* — `POST /api/playlists/import-m3u`, parser `lib/m3u.js` (BOM, CRLF, EXTINF), résolution par `/api/stream/<id>` puis `(artist,title)` puis basename, tests 9/9.
 - [x] ~~**Export playlist M3U**~~ *(P2)* — `GET /api/playlists/:id/export.m3u`.
@@ -131,7 +131,7 @@
 
 - [x] ~~**Hot reload du renderer en dev**~~ *(P2)* — `fs.watch` sur `public/`, reload sur change quand `--dev`.
 - [x] ~~**`npm run dev` qui ouvre devtools auto**~~ *(P2)* — devtools detached quand `--dev`.
-- [ ] **Script `npm run scan`** *(P3)* — scan headless pour debug.
+- [x] ~~**Script `npm run scan`**~~ *(P3)* — `scripts/scan.js`, lit DEV_DATA_DIR ou ./dev-data, run rescan, log stats temps + ms/track. `GB_USE_WORKER=1` pour activer le pool.
 - [x] ~~**Mock library pour dev sans fichiers**~~ *(P3)* — `lib/mock-library.js` + endpoints `/api/_dev/library/{seed,clear}` + `npm run dev:server` qui boot tout en mode mock.
 - [x] ~~**`engines` dans package.json**~~ *(P2)* — Node ≥ 18.
 - [x] ~~**Mettre à jour les deps**~~ *(P1)* — Electron 28 → 31, ajout devDeps eslint/prettier/supertest.
@@ -148,6 +148,8 @@
 
 ## ✅ Done (récents — référence)
 
+- [x] **v3.12.0** — query operators (`artist:`, `genre:`, `year:Y..Y`), history pagination, `npm run scan` headless.
+- [x] **v3.11.0** — radio mode (scoring artist/genre/year), sleep timer (server-side), mac/linux build config, CONTRIBUTING.md.
 - [x] **v3.10.0** — édition de tags (node-id3, MP3), lyrics fetch (lyrics.ovh + cache), logs main.js, tags multi-valeurs (`track.artists[]`, `track.genres[]`).
 - [x] **v3.9.0** — migrations JSON versionnées, backup auto + restore, export CSV/JSON, import M3U, ETag stream, drag&drop fichiers + reorder queue, mini-player layout, ReplayGain, EQ persist, prefers-reduced-motion.
 - [x] **v3.8.0** — logger structuré (zero dep), endpoints `/api/_dev/*`, mock library, `npm run dev:server`, esbuild setup, JS extrait dans `public/js/main.js`.

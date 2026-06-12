@@ -19,6 +19,7 @@ const tagWriter = require('./lib/tag-writer');
 const lyricsLib = require('./lib/lyrics');
 const multitag = require('./lib/multitag');
 const radio = require('./lib/radio');
+const queryLib = require('./lib/query');
 let backupTimer = null;
 let log = getLogger();
 let scannerPool = null;
@@ -695,21 +696,21 @@ function startServer(port) {
 
     // ─── API Routes ──────────────────────────────────────────────────────────
     app.get('/api/tracks', (req, res) => {
-      const q = (req.query.q || '').toLowerCase().trim();
+      const q = req.query.q || '';
       const genre = (req.query.genre || '').trim().toLowerCase();
       // library is sparse (gaps from deleted files) — filter compacts it.
       let results = library.filter(Boolean);
       if (genre) {
-        // Substring match: "Hip-Hop" matches "Hip-Hop", "Hip-Hop, R&B", etc.
+        // Genre query param is a separate top-level filter (preserved for
+        // older clients that drive the dropdown). Substring match.
         results = results.filter(t => t.genre && t.genre.toLowerCase().includes(genre));
       }
       if (q) {
-        results = results.filter(t =>
-          t.title.toLowerCase().includes(q) ||
-          t.artist.toLowerCase().includes(q) ||
-          t.album.toLowerCase().includes(q) ||
-          (t.genre && t.genre.toLowerCase().includes(q))
-        );
+        // The query string supports operator syntax: `artist:NTM genre:rap
+        // year:2010..2015 word`. Plain words (no `key:` prefix) AND across
+        // title/artist/album/genre.
+        const parsed = queryLib.parseQuery(q);
+        results = queryLib.applyQuery(parsed, results);
       }
       // Optional pagination — clients that want everything in one shot can
       // skip both params (legacy behavior). Lazy-loaders pass `offset` and
@@ -906,8 +907,10 @@ function startServer(port) {
     });
 
     app.get('/api/history/recent', (req, res) => {
-      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-      res.json(history.slice(0, limit));
+      const limit = Math.min(parseInt(req.query.limit) || 50, 500);
+      const offset = Math.max(0, parseInt(req.query.offset) || 0);
+      res.set('X-Total-Count', String(history.length));
+      res.json(history.slice(offset, offset + limit));
     });
 
     app.get('/api/history/top', (req, res) => {
