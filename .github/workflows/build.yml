@@ -63,6 +63,12 @@ jobs:
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          # Publish immediately (no manual "Publish release" click needed) and
+          # mark the tag as Latest so electron-updater picks it up.
+          draft: false
+          prerelease: false
+          make_latest: 'true'
+          generate_release_notes: false
           files: |
             dist/*.exe
             dist/*.yml
