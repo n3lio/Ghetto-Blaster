@@ -131,25 +131,31 @@ window._updateState = { status: 'checking', version: null, percent: null };
 function syncSettingsUpdate() {
   var label = document.getElementById('settingsUpdateStatus');
   if (!label) return;
-  var st = window._updateState;
+  var st = window._updateState || { status: 'idle' };
   if (st.status === 'available') {
     label.textContent = '⬆ v' + st.version + ' available';
     label.style.color = '#b68adf'; label.style.borderColor = '#b68adf'; label.style.background = 'rgba(182,138,223,0.1)';
   } else if (st.status === 'downloading') {
     label.textContent = '↓ Downloading…' + (st.percent ? ' ' + st.percent + '%' : '');
-    label.style.color = 'var(--accent)'; label.style.borderColor = 'var(--accent)'; label.style.background = 'rgba(232,164,53,0.08)';
+    label.style.color = 'var(--accent)'; label.style.borderColor = 'var(--accent)'; label.style.background = 'var(--accent-subtle)';
   } else if (st.status === 'ready') {
-    label.textContent = '✓ v' + st.version + ' ready';
+    label.textContent = '✓ v' + st.version + ' ready — restart to install';
     label.style.color = 'var(--green)'; label.style.borderColor = 'var(--green)'; label.style.background = 'rgba(122,196,122,0.08)';
   } else if (st.status === 'error') {
-    label.textContent = '✕ Failed — retry?';
+    label.textContent = '⚠ check failed — click retry';
     label.style.color = 'var(--red)'; label.style.borderColor = 'var(--red)'; label.style.background = 'rgba(224,85,85,0.08)';
   } else if (st.status === 'uptodate') {
     label.textContent = '✓ Up to date';
     label.style.color = 'var(--green)'; label.style.borderColor = 'var(--green)'; label.style.background = 'rgba(122,196,122,0.08)';
+  } else if (st.status === 'checking') {
+    label.textContent = '… Checking';
+    label.style.color = 'var(--text-dim)'; label.style.borderColor = 'var(--border)'; label.style.background = 'transparent';
   } else {
-    label.textContent = '';
-    label.style.background = 'transparent';
+    // idle (initial state, before the first auto-check has fired) — show
+    // a neutral hint instead of an empty pill so the user knows what the
+    // pill is supposed to be for.
+    label.textContent = '— not checked yet';
+    label.style.color = 'var(--text-dim)'; label.style.borderColor = 'var(--border)'; label.style.background = 'transparent';
   }
 }
 
@@ -182,6 +188,18 @@ async function openSettings() {
   if (window.resonance) {
     var cfg = await window.resonance.getConfig();
     settingsFolders = cfg.musicFolders || [];
+    // Refresh the update pill every time Settings opens — covers the case
+    // where the modal opens before any updater event has fired and the
+    // pill would otherwise show stale '— not checked yet'.
+    if (typeof window.resonance.getUpdateState === 'function') {
+      try {
+        const live = await window.resonance.getUpdateState();
+        if (live && live.status) {
+          window._updateState = Object.assign({}, window._updateState || {}, live);
+        }
+      } catch (e) { /* ignore */ }
+    }
+    syncSettingsUpdate();
     document.getElementById('settingsVizMode').value = vizMode;
     document.getElementById('settingsVizColor').value = vizColorMode;
     document.getElementById('settingsVizEnabled').checked = vizVisible;
@@ -300,6 +318,13 @@ document.getElementById('downloadQrBtn').addEventListener('click', function() {
 
 async function saveSettings(opts) {
   var doRescan = opts && opts.rescan;
+  // Detect a folders change so we can flag 'library outdated' if the user
+  // saves without rescanning. Read the previous folders from _appConfig
+  // (populated by openSettings) so we don't compare against stale state.
+  var prevFolders = (window._appConfig && Array.isArray(window._appConfig.musicFolders))
+    ? window._appConfig.musicFolders.slice() : [];
+  var foldersChanged = JSON.stringify(prevFolders.slice().sort())
+                    !== JSON.stringify(settingsFolders.slice().sort());
   vizMode = document.getElementById('settingsVizMode').value;
   vizColorMode = document.getElementById('settingsVizColor').value;
   vizVisible = document.getElementById('settingsVizEnabled').checked;
@@ -352,8 +377,15 @@ async function saveSettings(opts) {
       fetchGenres();
     }).catch(function(){});
     showToast('Settings saved. Scanning…');
+    // Rescan kicks off — clear any lingering 'library outdated' badge.
+    if (typeof window.setRescanNeeded === 'function') window.setRescanNeeded(false);
   } else {
     showToast('Settings saved');
+    // 'Save' without rescan + folders changed → surface the badge so the
+    // user knows the library on disk no longer matches what's loaded.
+    if (foldersChanged && typeof window.setRescanNeeded === 'function') {
+      window.setRescanNeeded(true);
+    }
   }
 }
 
@@ -539,9 +571,12 @@ if (isDesktop) {
   // update event BEFORE the renderer's listeners above were registered
   // (the first checkForUpdates fires 5s into app boot, which can outpace
   // the script bundle on cold install).
+  // ALSO covers states that don't have a header badge but should still
+  // show in the Settings pill ('uptodate', 'checking') — earlier versions
+  // skipped these and the pill was left empty / 0-width.
   if (typeof window.resonance.getUpdateState === 'function') {
     window.resonance.getUpdateState().then(function(state) {
-      if (!state || !state.status || state.status === 'idle') return;
+      if (!state || !state.status) return;
       var badge = document.getElementById('updateBadge');
       window._updateState = {
         status: state.status,
@@ -567,6 +602,8 @@ if (isDesktop) {
         badge.style.cursor = 'pointer';
         badge.onclick = triggerDownload;
       }
+      // 'uptodate', 'checking', 'idle' → no header badge but the
+      // Settings pill must still reflect the state.
       syncSettingsUpdate();
     }).catch(function() { /* ignore */ });
   }

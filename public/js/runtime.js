@@ -1382,6 +1382,43 @@ if ('serviceWorker' in navigator && !window.resonance) {
   }
 })();
 
+// ─── 'Library outdated · Scan' header badge (v3.15.7) ─────────────────────
+// When the user picks new music folders in Settings and clicks Save (not
+// Save & Rescan), surface a small badge in the header so they remember
+// the on-disk content hasn't been picked up yet. Clicking it triggers a
+// rescan, and the WS scan-done event tears it back down.
+(function setupRescanBadge() {
+  var badge = document.getElementById('rescanNeededBadge');
+  if (!badge) return;
+  function show() { badge.style.display = 'inline-flex'; }
+  function hide() { badge.style.display = 'none'; }
+  window.setRescanNeeded = function(needed) {
+    if (needed) show(); else hide();
+  };
+  badge.addEventListener('click', function() {
+    badge.textContent = 'Scanning…';
+    fetch('/api/rescan', { method: 'POST' }).catch(function() {});
+    // The WS scan:done handler hides the badge for us. As a backstop, also
+    // hide it after 90s in case the WS event is missed.
+    setTimeout(function() {
+      if (badge.style.display !== 'none') hide();
+      badge.textContent = 'Library outdated · Scan';
+    }, 90000);
+  });
+  // Hide the badge automatically when a scan completes server-side.
+  // The 'scan:done' broadcast is also handled by the legacy WS listener
+  // for the indicator + count refresh, so we just attach our own handler
+  // by polling — cheap and simpler than threading through the existing
+  // ws.onmessage in base.js.
+  setInterval(function() {
+    if (badge.style.display === 'none') return;
+    if (document.getElementById('scanIndicator').style.display !== 'none') return;
+    // After a scan finished, we'll see scanIndicator hidden and we can
+    // assume the library now reflects what's on disk. Reset badge text.
+    badge.textContent = 'Library outdated · Scan';
+  }, 4000);
+})();
+
 // ─── Volume persistence across track changes (v3.15.5) ────────────────────
 // Some browsers (and electron's chromium) reset audio.volume to 1 when
 // audio.src changes. The legacy slider only writes the volume on user

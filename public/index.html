@@ -51,6 +51,7 @@
   <h1>Ghetto <b>Blaster</b></h1>
   <span class="scan-indicator" id="scanIndicator" style="display:none;font-size:0.72rem;color:var(--accent);animation:pulse 1.2s infinite;">Scanning...</span>
   <span id="updateBadge" style="display:none;font-size:0.68rem;color:var(--green);background:rgba(122,196,122,0.1);padding:3px 8px;border-radius:12px;cursor:pointer;border:1px solid rgba(122,196,122,0.3);"></span>
+  <span id="rescanNeededBadge" style="display:none;font-size:0.68rem;color:var(--accent);background:var(--accent-subtle);padding:3px 10px;border-radius:12px;cursor:pointer;border:1px solid var(--accent);font-weight:600;letter-spacing:0.02em;" title="You changed music folders without scanning. Click to rescan now.">Library outdated · Scan</span>
   <div class="header-right">
     <div class="mode-toggle" id="modeToggle" style="display:none;">
       <button class="mode-btn active" data-mode="remote">Remote</button>
@@ -445,8 +446,8 @@
     </div><!-- end modal-body -->
     <div class="modal-actions">
       <button id="settingsCancel">Cancel</button>
-      <button class="secondary-accent" id="settingsSave">Save &amp; Rescan</button>
-      <button class="primary" id="settingsSaveOnly">Save</button>
+      <button class="secondary-accent" id="settingsSaveOnly">Save</button>
+      <button class="primary" id="settingsSave">Save &amp; Rescan</button>
     </div>
   </div>
 </div>

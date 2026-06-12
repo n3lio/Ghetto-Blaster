@@ -1061,18 +1061,31 @@ html[data-theme="auto"] .onboarding-card {
 }
 
 /* ─── v3.14: Settings extras (theme/sleep timer/backups) ─────────────────── */
+/* Match the legacy .settings-section spacing exactly so the two stacks
+   (legacy + extras) read as one continuous list. The extras used to
+   carry their own border-top, which combined with the legacy bottom-
+   border gave a doubled horizontal rule between them. */
 #settingsExtras .settings-section {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+  margin-top: 0;
+  margin-bottom: 18px;
+  padding-top: 0;
+  padding-bottom: 14px;
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+}
+#settingsExtras .settings-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
 }
 #settingsExtras .settings-section h3 {
-  font-size: 0.8rem;
-  font-weight: 700;
+  /* Mirror the legacy h4 styling (uppercase, small, muted). */
+  font-size: 0.68rem;
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 0 0 12px;
+  letter-spacing: 0.02em;
+  margin: 0 0 8px;
 }
 #settingsExtras .settings-row {
   display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
@@ -1333,17 +1346,9 @@ select:focus-visible {
 }
 
 /* ─── v3.15.4: Settings extras alignment with legacy sections ────────────── */
-/* The injected #settingsExtras used <h3> at uppercase-tracking; the legacy
-   sections use <h4> with a different look. Match the legacy h4 here. */
-#settingsExtras .settings-section { padding-top: 14px; }
-#settingsExtras .settings-section h3 {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: none;
-  letter-spacing: normal;
-  margin: 0 0 10px;
-}
+/* (v3.15.4 override removed in v3.15.7 — was redeclaring section spacing
+   in a way that re-introduced the double separator. The canonical block
+   for #settingsExtras .settings-section is above.) */
 /* Buttons in the extras now match the standard add-folder-btn vibe. */
 #settingsExtras .sleep-preset,
 #settingsExtras .sleep-cancel,
