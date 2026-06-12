@@ -1,5 +1,5 @@
     :root {
-      --hue: 38; /* Main accent hue (0-360). 38=amber, 270=purple, 180=teal, 0=red, 210=blue */
+      --hue: 0; /* Main accent hue (0-360). 0=red (default), 38=amber, 140=green, 190=cyan, 270=purple */
       --bg: #0a0a0b;
       --bg-warm: #0f0e0d;
       --surface: #161514;
@@ -73,8 +73,19 @@
       -webkit-app-region: drag;
     }
 
-    header * { -webkit-app-region: no-drag; }
-    header h1 { -webkit-app-region: no-drag; }
+    /* The window must remain draggable from the header bar. The previous
+       blanket `header * { no-drag }` rule defeated `header { drag }` because
+       every child opted out — so the user couldn't grab the title bar.
+       Now only interactive children opt out (buttons, inputs, the server
+       pill); empty header space and the title itself stay draggable. */
+    header button,
+    header input,
+    header select,
+    header .window-controls,
+    header .server-pill,
+    header .mode-toggle,
+    header .header-right > * { -webkit-app-region: no-drag; }
+    header h1 { -webkit-app-region: drag; cursor: default; }
 
     @property --title-end {
       syntax: '<color>';
@@ -979,4 +990,21 @@ html[data-theme="auto"] .onboarding-card {
   background: var(--surface);
   box-shadow: 0 20px 60px rgba(0,0,0,0.15);
   border: 1px solid var(--border);
+}
+
+/* ─── Modal action buttons: secondary-accent variant ───────────────────────
+   Used by Settings to differentiate "Save & Rescan" (less common) from
+   "Save" (the primary, filled accent). Outlined accent so it reads as
+   theme-coloured but visually subordinate to the primary.
+*/
+.modal-actions button.secondary-accent {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-weight: 600;
+}
+.modal-actions button.secondary-accent:hover {
+  background: var(--accent-subtle);
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
 }

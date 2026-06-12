@@ -99,6 +99,13 @@ function startEqWave() {
 }
 
 function fetchStats() {
+  // Show a quick placeholder so the panel never looks empty while the fetch
+  // is in flight — without it, on a fresh install the user sees just the
+  // section headings and thinks the panel is broken.
+  var statsCards = document.getElementById('statsCards');
+  if (statsCards && !statsCards.innerHTML.trim()) {
+    statsCards.innerHTML = '<div class="stat-card"><div class="stat-value">…</div><div class="stat-label">Loading</div></div>';
+  }
   fetch('/api/stats').then(function(r){ return r.json(); }).then(function(s) {
     var week = s.week || {};
     var month = s.month || {};
@@ -130,7 +137,7 @@ function fetchStats() {
         return '<div class="stat-row"><span class="stat-rank">' + (i+1) + '</span><span class="stat-name">' + esc(g.name) + '</span><div class="stat-bar"><div class="stat-bar-fill" style="width:' + (g.count/maxGenre*100) + '%;background:' + barColor + '"></div></div><span class="stat-count">' + g.count + '</span></div>';
       }).join('');
     }
-  }).catch(function(){});
+  }).catch(function(e){ console.warn('[gb] stats fetch failed:', e && e.message); });
 
   // Server stats
   fetch('/api/server/stats').then(function(r){ return r.json(); }).then(function(sv) {
@@ -141,7 +148,7 @@ function fetchStats() {
       '<div class="stat-card"><div class="stat-value">' + (sv.uniqueDevices || 0) + '</div><div class="stat-label">Unique devices</div></div>' +
       '<div class="stat-card"><div class="stat-value">' + (sv.currentConnections || 0) + '</div><div class="stat-label">Active now</div></div>' +
       '<div class="stat-card"><div class="stat-value">' + (sv.totalConnections || 0) + '</div><div class="stat-label">Total connections</div></div>';
-  }).catch(function(){});
+  }).catch(function(e){ console.warn('[gb] stats fetch failed:', e && e.message); });
 }
 
 function formatUptime(seconds) {
@@ -425,11 +432,11 @@ if (!isDesktop) {
   // Check if scan is in progress (to show/hide indicator correctly)
   fetch('/api/scan/status').then(function(r){ return r.json(); }).then(function(d) {
     document.getElementById('scanIndicator').style.display = d.scanning ? 'inline' : 'none';
-  }).catch(function(){});
+  }).catch(function(e){ console.warn('[gb] stats fetch failed:', e && e.message); });
   // Sync theme from server config
   fetch('/api/config/theme').then(function(r){ return r.json(); }).then(function(d) {
     if (d.hue != null) document.documentElement.style.setProperty('--hue', d.hue);
-  }).catch(function(){});
+  }).catch(function(e){ console.warn('[gb] stats fetch failed:', e && e.message); });
 }
 
 // ─── Init ────────────────────────────────────────────────────────────────────
@@ -635,81 +642,102 @@ if ('serviceWorker' in navigator && !window.resonance) {
   }
 })();
 
-// ─── Onboarding (first run / empty library) ────────────────────────────────
-// Reveals the welcome overlay when musicFolders is empty AND the library is
-// empty (so a user who hasn't scanned yet but has folders configured doesn't
-// see it). Hidden once a folder is picked or mock data is loaded.
+// ─── Onboarding (first run on desktop, first connection on mobile) ─────────
+// Two variants in the markup:
+//   - #onboardingDesktop: shown to the Electron renderer when musicFolders
+//     is empty. Buttons: 'Skip' OR 'Choose music folder'.
+//   - #onboardingMobile: shown to LAN clients on first visit. Pure
+//     informational — explains they're remote-controlling the desktop.
+// Dismissal is persisted in localStorage as `gb.onboardingSeen` so the
+// overlay never appears twice on the same device.
 (function setupOnboarding() {
   if (typeof window === 'undefined') return;
-  if (location.search.indexOf('mini=1') !== -1) return; // skip in mini-player
+  if (location.search.indexOf('mini=1') !== -1) return; // never in mini-player
   var overlay = document.getElementById('onboardingOverlay');
   if (!overlay) return;
 
-  function maybeShow() {
+  var DESKTOP = !!(window.resonance && window.resonance.isElectron);
+  var STORAGE_KEY = 'gb.onboardingSeen';
+  var SEEN_VARIANT = (function() {
+    try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }
+  })();
+
+  function markSeen(variant) {
+    try { localStorage.setItem(STORAGE_KEY, variant); } catch (e) {}
+  }
+
+  function hide() { overlay.style.display = 'none'; }
+
+  function showVariant(name) {
+    var d = document.getElementById('onboardingDesktop');
+    var m = document.getElementById('onboardingMobile');
+    if (d) d.style.display = name === 'desktop' ? 'block' : 'none';
+    if (m) m.style.display = name === 'mobile' ? 'block' : 'none';
+    overlay.style.display = 'flex';
+  }
+
+  function maybeShowDesktop() {
+    if (SEEN_VARIANT === 'desktop' || SEEN_VARIANT === 'desktop-skip') return;
     fetch('/api/tracks/count').then(function(r) { return r.json(); }).then(function(d) {
-      if (d && d.count > 0) return; // library already populated
-      // Probe musicFolders via window.resonance.getConfig() if available
-      // (desktop), otherwise fall back to /api/state semantic — if there's
-      // nothing playing and the library is empty, this is a first run.
-      var promise = (window.resonance && window.resonance.getConfig)
-        ? window.resonance.getConfig()
-        : fetch('/api/state').then(function(r) { return r.json(); }).then(function() { return {}; });
-      promise.then(function(cfg) {
+      if (d && d.count > 0) return;
+      window.resonance.getConfig().then(function(cfg) {
         var folders = (cfg && cfg.musicFolders) || [];
-        if (folders.length === 0) overlay.style.display = 'flex';
+        if (folders.length === 0) showVariant('desktop');
       });
     }).catch(function() {});
   }
 
-  function hide() {
-    overlay.style.display = 'none';
+  function maybeShowMobile() {
+    // Mobile/LAN clients see the welcome only once per device. Independent
+    // of library state — they may be connecting to a populated server just
+    // to remote-control it.
+    if (SEEN_VARIANT) return;
+    showVariant('mobile');
   }
 
-  var primaryBtn = document.getElementById('onboardingPickFolder');
-  var mockBtn = document.getElementById('onboardingMock');
+  // ─── Desktop button wiring ─────────────────────────────────────────────
+  var pickBtn = document.getElementById('onboardingPickFolder');
+  var skipBtn = document.getElementById('onboardingSkip');
 
-  if (primaryBtn) {
-    primaryBtn.addEventListener('click', function() {
-      if (window.resonance && window.resonance.pickFolder) {
-        window.resonance.pickFolder().then(function(folderPath) {
-          if (!folderPath) return;
-          window.resonance.getConfig().then(function(cfg) {
-            var folders = (cfg && cfg.musicFolders) || [];
-            if (folders.indexOf(folderPath) === -1) folders.push(folderPath);
-            window.resonance.setConfig({ musicFolders: folders }).then(function() {
-              hide();
-              fetch('/api/rescan', { method: 'POST' }).catch(function() {});
-            });
+  if (pickBtn) {
+    pickBtn.addEventListener('click', function() {
+      if (!(window.resonance && window.resonance.pickFolder)) return;
+      window.resonance.pickFolder().then(function(folderPath) {
+        if (!folderPath) return;
+        window.resonance.getConfig().then(function(cfg) {
+          var folders = (cfg && cfg.musicFolders) || [];
+          if (folders.indexOf(folderPath) === -1) folders.push(folderPath);
+          window.resonance.setConfig({ musicFolders: folders }).then(function() {
+            markSeen('desktop');
+            hide();
+            fetch('/api/rescan', { method: 'POST' }).catch(function() {});
           });
         });
-      } else {
-        // No Electron API available (LAN client) — point at Settings instead.
-        var settingsBtn = document.getElementById('settingsBtn');
-        if (settingsBtn) settingsBtn.click();
-        hide();
-      }
-    });
-  }
-
-  if (mockBtn) {
-    mockBtn.addEventListener('click', function() {
-      // Try the dev-only seed endpoint. If devMode isn't on, fall back to
-      // hiding so the user can use Settings → "Add folder" path manually.
-      fetch('/api/_dev/library/seed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 100 }),
-      }).then(function(r) {
-        if (!r.ok) throw new Error('not in dev mode');
-        hide();
-      }).catch(function() {
-        hide();
       });
     });
   }
 
-  // Wait a tick for the renderer to settle before probing (avoids a flash).
-  setTimeout(maybeShow, 400);
+  if (skipBtn) {
+    skipBtn.addEventListener('click', function() {
+      markSeen('desktop-skip');
+      hide();
+    });
+  }
+
+  // ─── Mobile button wiring ──────────────────────────────────────────────
+  var mobileGo = document.getElementById('onboardingMobileGo');
+  if (mobileGo) {
+    mobileGo.addEventListener('click', function() {
+      markSeen('mobile');
+      hide();
+    });
+  }
+
+  // ─── Trigger ───────────────────────────────────────────────────────────
+  setTimeout(function() {
+    if (DESKTOP) maybeShowDesktop();
+    else maybeShowMobile();
+  }, 400);
 })();
 
 // ─── Mini-player toggle (?mini=1) ──────────────────────────────────────────
@@ -725,22 +753,26 @@ if ('serviceWorker' in navigator && !window.resonance) {
   } catch (e) { /* ignore */ }
 })();
 
-// ─── ReplayGain ────────────────────────────────────────────────────────────
-// Smooth out loudness differences between tracks. We don't insert a Web Audio
-// GainNode (the EQ chain is already in place) — instead we keep a multiplier
-// on `audio.volume` derived from the track's RG track-gain tag (in dB). The
-// factor is capped at 1.0 so we never amplify above the user's chosen
-// volume — only attenuate. This matches what most ReplayGain-aware players
-// do by default and avoids clipping on quiet tracks.
+// ─── ReplayGain (opt-in) ───────────────────────────────────────────────────
+// Smooths out loudness differences between tracks by attenuating audio.volume
+// by 10^(rg/20) when the track has a ReplayGain tag. Off by default — turning
+// it on without the user asking caused surprise volume drops on tagged tracks
+// AND fought with the crossfade interval (which writes to audio.volume too).
+//
+// To enable: set _appConfig.replayGain = true (Settings UI toggle pending).
+// While a crossfade ramp is in flight (window.crossfadeTriggered === true)
+// we skip applying RG so we don't tug-of-war with the fade.
 (function setupReplayGain() {
   var audioEl = document.querySelector('audio');
   if (!audioEl) return;
-  var rgFactor = 1;
+
+  function isEnabled() {
+    return !!(window._appConfig && window._appConfig.replayGain);
+  }
 
   function dbToFactor(db) {
     if (typeof db !== 'number' || !isFinite(db)) return 1;
-    var factor = Math.pow(10, db / 20);
-    return Math.min(1, Math.max(0, factor));
+    return Math.min(1, Math.max(0, Math.pow(10, db / 20)));
   }
 
   function userVolume() {
@@ -748,29 +780,22 @@ if ('serviceWorker' in navigator && !window.resonance) {
     return typeof cfg.volume === 'number' ? cfg.volume : 1;
   }
 
-  function applyTo(audio) {
-    if (!audio) return;
-    audio.volume = userVolume() * rgFactor;
-  }
-
-  // Hook into track changes via the audio src — we don't need to touch
-  // playCurrentTrack() this way.
-  var lastSrc = '';
-  function refresh() {
-    if (!audioEl.src || audioEl.src === lastSrc) return;
-    lastSrc = audioEl.src;
+  function applyForCurrentTrack() {
+    if (!isEnabled()) return;
+    if (window.crossfadeTriggered) return; // never fight the crossfade
+    if (!audioEl.src) return;
     var m = /\/api\/stream\/(\d+)/.exec(audioEl.src);
-    if (!m) { rgFactor = 1; applyTo(audioEl); return; }
+    if (!m) return;
     var trackId = parseInt(m[1], 10);
     var lib = window.library || (window.tracks && window.tracks.list);
-    var track = null;
-    if (Array.isArray(lib)) track = lib.find(function(t) { return t && t.id === trackId; });
-    rgFactor = (track && track.replayGain != null) ? dbToFactor(track.replayGain) : 1;
-    applyTo(audioEl);
+    var track = Array.isArray(lib) ? lib.find(function(t) { return t && t.id === trackId; }) : null;
+    var factor = (track && track.replayGain != null) ? dbToFactor(track.replayGain) : 1;
+    audioEl.volume = userVolume() * factor;
   }
 
-  audioEl.addEventListener('loadstart', refresh);
-  setInterval(refresh, 250); // cheap safety net for missed loadstart events
+  // Hook only on loadstart — no polling. Way less likely to step on the
+  // crossfade ramp than the previous setInterval implementation.
+  audioEl.addEventListener('loadstart', applyForCurrentTrack);
 })();
 
 // ─── EQ preset persistence ─────────────────────────────────────────────────
@@ -971,20 +996,8 @@ if ('serviceWorker' in navigator && !window.resonance) {
   });
 })();
 
-// ─── Crossfade safety: restore volume on manual pause ──────────────────────
-// The legacy crossfade uses setInterval to step `audio.volume` toward 0. If
-// the user hits pause mid-ramp, the volume is left at a partial level so the
-// next play starts barely audible. Restore the user's target volume on pause
-// when no automatic fade is in flight.
-(function setupCrossfadeSafety() {
-  var audioEl = document.querySelector('audio');
-  if (!audioEl) return;
-  audioEl.addEventListener('pause', function() {
-    if (typeof window.crossfadeTriggered !== 'undefined' && window.crossfadeTriggered) return;
-    var cfg = window._appConfig || {};
-    var target = typeof cfg.volume === 'number' ? cfg.volume : 1;
-    if (audioEl.volume < target * 0.5) {
-      audioEl.volume = target;
-    }
-  });
-})();
+// (Crossfade safety on pause was removed — it was a rustine that conflicted
+//  with the legacy crossfade ramp. The crossfade itself reset volume to the
+//  saved target after a fade-in, so the safety net was unneeded and harmful
+//  in edge cases. If pause mid-fade leaves audio.volume low, hitting play
+//  resumes the fade-in correctly.)

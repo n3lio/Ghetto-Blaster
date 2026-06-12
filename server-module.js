@@ -1627,7 +1627,7 @@ function startServer(port) {
 
     // Theme (for mobile to sync accent color)
     app.get('/api/config/theme', (req, res) => {
-      res.json({ hue: config.hue || 38 });
+      res.json({ hue: config.hue != null ? config.hue : 0 });
     });
 
     // Desktop audio outputs (exposed for mobile remote control)

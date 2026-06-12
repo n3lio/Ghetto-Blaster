@@ -14,19 +14,36 @@
 </head>
 <body>
 
-<!-- Onboarding overlay — revealed by main.js when musicFolders is empty -->
+<!-- Onboarding overlay — revealed by runtime.js when appropriate.
+     Two variants: desktop (#onboardingDesktop) and mobile (#onboardingMobile).
+     Only one is shown at a time. Dismissal is persisted in localStorage so
+     the overlay only appears on the very first visit. -->
 <div class="onboarding-overlay" id="onboardingOverlay" style="display:none;">
   <div class="onboarding-card">
     <div class="onboarding-logo">
       <span>Ghetto <b>Blaster</b></span>
     </div>
-    <h2>Welcome</h2>
-    <p>To get started, point Ghetto Blaster at a folder containing your music. We'll scan it once and you're ready to play.</p>
-    <div class="onboarding-actions">
-      <button class="onboarding-primary" id="onboardingPickFolder">Choose music folder</button>
-      <button class="onboarding-secondary" id="onboardingMock">Continue with sample tracks</button>
+
+    <!-- Desktop variant: pick a folder, scan, play -->
+    <div class="onboarding-variant" id="onboardingDesktop" style="display:none;">
+      <h2>Welcome</h2>
+      <p>Point Ghetto Blaster at a folder containing your music. We'll scan it once and you're ready to play.</p>
+      <div class="onboarding-actions">
+        <button class="onboarding-secondary" id="onboardingSkip">Skip — I'll add it later</button>
+        <button class="onboarding-primary" id="onboardingPickFolder">Choose music folder</button>
+      </div>
+      <p class="onboarding-hint">Supported: MP3, M4A, FLAC, OGG, WAV, AAC. You can add more folders later in Settings.</p>
     </div>
-    <p class="onboarding-hint">Supported: MP3, M4A, FLAC, OGG, WAV, AAC. You can add more folders later in Settings.</p>
+
+    <!-- Mobile / LAN variant: explain the remote-control setup -->
+    <div class="onboarding-variant" id="onboardingMobile" style="display:none;">
+      <h2>Connected</h2>
+      <p>You're paired with the desktop player on your network. From here you can browse the library, control playback, and queue tracks — the audio plays on the desktop.</p>
+      <div class="onboarding-actions">
+        <button class="onboarding-primary" id="onboardingMobileGo">Got it</button>
+      </div>
+      <p class="onboarding-hint">Tip: Add this page to your home screen for quick access.</p>
+    </div>
   </div>
 </div>
 
@@ -49,7 +66,7 @@
         <p class="sp-hint" id="spHint" style="display:none;">Restart required to apply.</p>
       </div>
     </span>
-    <button class="settings-btn" id="shortcutsBtn" title="About" style="font-size:0.8rem;font-weight:700;font-family:var(--font);">?</button>
+    <button class="settings-btn" id="shortcutsBtn" title="About" style="font-size:0.85rem;font-weight:800;font-family:var(--font);letter-spacing:-0.02em;">?</button>
     <button class="settings-btn" id="settingsBtn" title="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
@@ -90,9 +107,9 @@
           </button>
           <div class="viz-menu" id="vizMenu">
             <div class="viz-menu-label">Shape</div>
-            <div class="viz-menu-item active" data-viz="nebula">Nebula</div>
+            <div class="viz-menu-item" data-viz="nebula">Nebula</div>
             <div class="viz-menu-item" data-viz="glow">Glow</div>
-            <div class="viz-menu-item" data-viz="drift">Drift</div>
+            <div class="viz-menu-item active" data-viz="drift">Drift</div>
             <div class="viz-menu-item" data-viz="wave">Wave</div>
             <div class="viz-menu-item" data-viz="starfield">Starfield</div>
             <div class="viz-menu-item" data-viz="bars">Bars</div>
@@ -403,8 +420,8 @@
     </div><!-- end modal-body -->
     <div class="modal-actions">
       <button id="settingsCancel">Cancel</button>
-      <button id="settingsSaveOnly" style="background:var(--green);color:#0a0a0b;border-color:var(--green);font-weight:600;">Save</button>
-      <button class="primary" id="settingsSave">Save & Rescan</button>
+      <button class="secondary-accent" id="settingsSave">Save &amp; Rescan</button>
+      <button class="primary" id="settingsSaveOnly">Save</button>
     </div>
   </div>
 </div>

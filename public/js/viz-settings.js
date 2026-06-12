@@ -4,7 +4,7 @@
 // ─── Visualizer ──────────────────────────────────────────────────────────────
 var vizContainer = document.getElementById('vizContainer');
 var vizCanvas = document.getElementById('vizCanvas');
-var viz = null, vizInitialized = false, vizVisible = true, vizMode = 'nebula';
+var viz = null, vizInitialized = false, vizVisible = true, vizMode = 'drift';
 // Set active class to match default vizVisible=true (canvas visible)
 vizContainer.classList.add('active');
 
@@ -185,7 +185,7 @@ async function openSettings() {
     document.getElementById('settingsVizMode').value = vizMode;
     document.getElementById('settingsVizColor').value = vizColorMode;
     document.getElementById('settingsVizEnabled').checked = vizVisible;
-    document.getElementById('settingsHue').value = cfg.hue || 38;
+    document.getElementById('settingsHue').value = cfg.hue != null ? cfg.hue : 0;
     document.getElementById('settingsLanEnabled').checked = cfg.lanEnabled !== false;
     // List audio output devices
     if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
@@ -324,8 +324,16 @@ async function saveSettings(opts) {
   document.querySelectorAll('.viz-menu-item[data-viz]').forEach(function(i){ i.classList.toggle('active', i.dataset.viz === vizMode); });
   document.querySelectorAll('.viz-menu-item[data-color]').forEach(function(i){ i.classList.toggle('active', i.dataset.color === vizColorMode); });
   document.getElementById('vizContainer').classList.toggle('active', vizVisible);
-  if (vizVisible && viz) { viz.resize(); viz.start(); }
-  else if (viz) viz.stop();
+  // Force a clean restart of the visualizer after settings change. Without
+  // the stop() the rAF loop kept by start() can be left orphaned by the
+  // mode/color switch above and the canvas freezes until the user toggles
+  // disable/enable manually. Defer slightly so the DOM has time to apply
+  // the .active class change before resize() reads its dimensions.
+  if (vizVisible && viz) {
+    setTimeout(function() { try { viz.stop(); viz.resize(); viz.start(); } catch (e) {} }, 50);
+  } else if (viz) {
+    try { viz.stop(); } catch (e) {}
+  }
 
   // Apply theme
   document.documentElement.style.setProperty('--hue', hue);
