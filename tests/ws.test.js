@@ -42,21 +42,33 @@ test.after(async () => {
 });
 
 test('localhost client receives initial state on connect', async () => {
+  // Server sends a `whoami` first (so the client knows its userId for the
+  // guest-mode role lookup) followed by `state`. Read messages until we
+  // see `state` and assert on its shape.
   await new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
     const timer = setTimeout(() => {
       ws.terminate();
       reject(new Error('No state message within 2s'));
     }, 2000);
-    ws.once('message', (raw) => {
-      clearTimeout(timer);
+    let seenWhoami = false;
+    ws.on('message', (raw) => {
       try {
         const msg = JSON.parse(raw.toString());
-        assert.equal(msg.type, 'state');
+        if (msg.type === 'whoami') {
+          seenWhoami = true;
+          assert.equal(typeof (msg.data && msg.data.id), 'string');
+          return; // wait for the next frame
+        }
+        if (msg.type !== 'state') return; // skip any other gossip
+        clearTimeout(timer);
         assert.equal(typeof msg.data, 'object');
+        // whoami should always precede state — sanity-check ordering.
+        assert.equal(seenWhoami, true, 'whoami should arrive before state');
         ws.close();
         resolve();
       } catch (e) {
+        clearTimeout(timer);
         reject(e);
       }
     });
