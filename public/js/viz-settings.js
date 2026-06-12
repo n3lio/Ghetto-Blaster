@@ -535,6 +535,42 @@ if (isDesktop) {
     syncSettingsUpdate();
   });
 
+  // Pull current state at boot — covers the race where main.js emitted an
+  // update event BEFORE the renderer's listeners above were registered
+  // (the first checkForUpdates fires 5s into app boot, which can outpace
+  // the script bundle on cold install).
+  if (typeof window.resonance.getUpdateState === 'function') {
+    window.resonance.getUpdateState().then(function(state) {
+      if (!state || !state.status || state.status === 'idle') return;
+      var badge = document.getElementById('updateBadge');
+      window._updateState = {
+        status: state.status,
+        version: state.version,
+        percent: state.percent,
+      };
+      if (state.status === 'available') {
+        badge.textContent = 'v' + state.version + ' available';
+        setBadgeStyle(badge, 'available');
+        badge.style.cursor = 'pointer';
+        badge.onclick = triggerDownload;
+      } else if (state.status === 'downloading') {
+        badge.textContent = 'downloading…' + (state.percent ? ' ' + state.percent + '%' : '');
+        setBadgeStyle(badge, 'downloading');
+      } else if (state.status === 'ready') {
+        badge.textContent = 'v' + state.version + ' ready — click to install';
+        setBadgeStyle(badge, 'ready');
+        badge.style.cursor = 'pointer';
+        badge.onclick = function() { window.resonance.restartToUpdate(); };
+      } else if (state.status === 'error') {
+        badge.textContent = 'update error — click to retry';
+        setBadgeStyle(badge, 'error');
+        badge.style.cursor = 'pointer';
+        badge.onclick = triggerDownload;
+      }
+      syncSettingsUpdate();
+    }).catch(function() { /* ignore */ });
+  }
+
   // Settings: Check for updates button
   document.getElementById('settingsCheckUpdate').addEventListener('click', function() {
     var label = document.getElementById('settingsUpdateStatus');

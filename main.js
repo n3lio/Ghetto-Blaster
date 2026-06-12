@@ -237,36 +237,49 @@ function toggleMiniPlayer() {
 ipcMain.handle('miniplayer:toggle', () => { toggleMiniPlayer(); });
 
 // ─── Auto Updater ───────────────────────────────────────────────────────────
+// We mirror every updater event into `updateState` so that a renderer that
+// loads AFTER the first checkForUpdates() (which fires 5s into the app boot
+// and can outpace the script bundle on cold install) can still read the
+// current status via the `app:get-update-state` IPC handler below. Without
+// this mirror the renderer's update badge stayed invisible because the
+// 'app:update-available' webContents.send had already been emitted before
+// the listener was wired.
+let updateState = { status: 'idle', version: null, percent: null };
+
 function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('update-available', (info) => {
+    updateState = { status: 'available', version: info.version, percent: null };
     notifyRenderer('app:update-available', { version: info.version });
   });
 
   autoUpdater.on('update-not-available', () => {
+    updateState = { status: 'uptodate', version: null, percent: null };
     notifyRenderer('app:update-uptodate', {});
   });
 
   autoUpdater.on('download-progress', (progress) => {
-    notifyRenderer('app:update-progress', { percent: Math.round(progress.percent) });
+    const percent = Math.round(progress.percent);
+    updateState = Object.assign({}, updateState, { status: 'downloading', percent });
+    notifyRenderer('app:update-progress', { percent });
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    updateState = { status: 'ready', version: info.version, percent: 100 };
+    log.info('update downloaded', { version: info && info.version });
     notifyRenderer('app:update-downloaded', { version: info.version });
   });
 
   autoUpdater.on('error', (err) => {
+    updateState = Object.assign({}, updateState, { status: 'error', error: err.message });
     log.error('autoUpdater error', { error: err.message });
     notifyRenderer('app:update-error', { message: err.message });
   });
 
   autoUpdater.on('update-available', (info) => {
     log.info('update available', { version: info && info.version });
-  });
-  autoUpdater.on('update-downloaded', (info) => {
-    log.info('update downloaded', { version: info && info.version });
   });
 
   // Delay update check to ensure renderer is ready to receive events
@@ -287,11 +300,20 @@ ipcMain.handle('app:download-update', () => {
 
 // IPC: user wants to re-check for updates (from Settings)
 ipcMain.handle('app:check-update', () => {
+  // Reset state so the UI shows "Checking…" while the request is in flight
+  // (the autoUpdater events overwrite it when they fire).
+  updateState = { status: 'checking', version: null, percent: null };
   autoUpdater.checkForUpdates().catch((err) => {
-    console.log('Manual update check failed:', err.message);
+    updateState = { status: 'error', error: err.message };
+    log.info('manual update check failed', { error: err.message });
     notifyRenderer('app:update-error', { message: err.message });
   });
 });
+
+// IPC: renderer pulls the current state on boot (avoids the race where the
+// main process emitted 'update-available' before the renderer's listener
+// was registered).
+ipcMain.handle('app:get-update-state', () => updateState);
 
 // ─── Splash Screen ──────────────────────────────────────────────────────────
 let splashWindow = null;

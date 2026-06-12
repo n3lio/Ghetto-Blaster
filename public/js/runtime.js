@@ -429,15 +429,53 @@ if (!isDesktop) {
   }).catch(function(){ fetchRemoteQueue(); });
   // Retry queue fetch after 3s in case desktop hadn't posted yet
   setTimeout(function() { if (!remoteQueueData.length) fetchRemoteQueue(); }, 3000);
-  // Check if scan is in progress (to show/hide indicator correctly)
-  fetch('/api/scan/status').then(function(r){ return r.json(); }).then(function(d) {
-    document.getElementById('scanIndicator').style.display = d.scanning ? 'inline' : 'none';
-  }).catch(function(e){ console.warn('[gb] stats fetch failed:', e && e.message); });
   // Sync theme from server config
   fetch('/api/config/theme').then(function(r){ return r.json(); }).then(function(d) {
     if (d.hue != null) document.documentElement.style.setProperty('--hue', d.hue);
-  }).catch(function(e){ console.warn('[gb] stats fetch failed:', e && e.message); });
+  }).catch(function(e){ console.warn('[gb] theme fetch failed:', e && e.message); });
 }
+
+// ─── Scan-state probe (desktop AND mobile) ─────────────────────────────────
+// The 'scan:start' WS event is broadcast at the moment the server begins
+// scanning, which is often BEFORE the renderer's WebSocket has finished
+// connecting — so the listener in the WS handler can miss it. Probe
+// /api/scan/status on boot, and if a scan is in progress, kick off a
+// periodic refetch so the indicator and the track count stay accurate
+// until the scan finishes.
+(function probeScanState() {
+  var ind = document.getElementById('scanIndicator');
+  var countEl = document.getElementById('trackCount');
+  if (!ind) return;
+  function refresh() {
+    return fetch('/api/scan/status')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var scanning = !!(d && d.scanning);
+        ind.style.display = scanning ? 'inline' : 'none';
+        if (scanning && countEl && countEl.textContent.trim().length === 0) {
+          countEl.textContent = 'Scanning library...';
+        }
+        return scanning;
+      })
+      .catch(function() { return false; });
+  }
+  refresh().then(function(scanning) {
+    if (!scanning) return;
+    var iv = setInterval(function() {
+      refresh().then(function(stillScanning) {
+        if (!stillScanning) {
+          clearInterval(iv);
+          // Reload library + genres now that the scan settled.
+          if (typeof window.fetchTracks === 'function') window.fetchTracks();
+          if (typeof window.fetchGenres === 'function') window.fetchGenres();
+        } else {
+          // Pull fresh tracks while scan is running so the count creeps up.
+          if (typeof window.fetchTracks === 'function') window.fetchTracks();
+        }
+      });
+    }, 4000);
+  });
+})();
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 fetchTracks();

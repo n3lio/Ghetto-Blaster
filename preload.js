@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('resonance', {
   downloadUpdate: () => ipcRenderer.invoke('app:download-update'),
   restartToUpdate: () => ipcRenderer.invoke('app:restart-update'),
   checkForUpdates: () => ipcRenderer.invoke('app:check-update'),
+  getUpdateState: () => ipcRenderer.invoke('app:get-update-state'),
   openBluetoothSettings: () => ipcRenderer.invoke('app:open-bt-settings'),
 
   // Events
