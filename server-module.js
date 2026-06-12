@@ -159,6 +159,10 @@ const DEFAULT_CONFIG = {
   watchForChanges: true,
   maxConnections: 20,
   lanEnabled: true,
+  // v3.15.3: turn on the worker pool by default. Sequential parseFile()
+  // capped scans at ~10 tracks/sec on n3lio's 8000-track library — the
+  // pool with 4 workers gets us 3-4× faster.
+  scanInWorker: true,
 };
 
 function getConfigPath() { return path.join(DATA_DIR, 'config.json'); }
@@ -405,100 +409,116 @@ function writeCachedCover(trackId, ext, data, sourceMtimeMs) {
   }
 }
 
+// Parses one audio file and stores it in library[trackId]. Extracted from
+// the inner loop so we can run a batch of these concurrently — each call
+// does its own try/catch, so one bad file doesn't take down the batch.
+async function ingestAudioFile(fullPath, entryName) {
+  const trackId = getOrAssignTrackId(fullPath);
+  let mtimeMs = 0;
+  try { mtimeMs = fs.statSync(fullPath).mtimeMs; } catch (e) { /* ignore */ }
+  try {
+    // Re-use cached cover if the source mtime matches.
+    const cachedCoverPath = findCachedCover(trackId, mtimeMs);
+    const metadata = await parseTrackMetadata(fullPath);
+    const genre = metadata.common.genre ? metadata.common.genre[0] : null;
+    if (genre) genres.add(genre);
+
+    const picture = metadata.common.picture && metadata.common.picture[0];
+    const hasCover = !!picture || !!cachedCoverPath;
+
+    if (picture && !cachedCoverPath) {
+      let ext = '.jpg';
+      if (picture.format) {
+        if (picture.format.includes('png')) ext = '.png';
+        else if (picture.format.includes('webp')) ext = '.webp';
+        else if (picture.format.includes('gif')) ext = '.gif';
+      }
+      writeCachedCover(trackId, ext, picture.data, mtimeMs);
+    }
+
+    // ReplayGain track gain in dB, if tagged.
+    let replayGain = null;
+    const rg = metadata.common && metadata.common.replayGainTrackGain;
+    if (rg && typeof rg.dB === 'number' && Number.isFinite(rg.dB)) {
+      replayGain = rg.dB;
+    }
+
+    const rawArtist = metadata.common.artist || 'Unknown';
+    const rawGenre = genre;
+
+    library[trackId] = {
+      id: trackId,
+      path: fullPath,
+      filename: entryName,
+      title: metadata.common.title || entryName.replace(/\.[^/.]+$/, ''),
+      artist: rawArtist,
+      artists: multitag.splitArtistTag(rawArtist),
+      albumArtist: metadata.common.albumartist || '',
+      album: metadata.common.album || '',
+      year: metadata.common.year || null,
+      duration: metadata.format.duration || 0,
+      genre: rawGenre,
+      genres: multitag.splitGenreTag(rawGenre),
+      hasCover,
+      replayGain,
+    };
+  } catch (e) {
+    library[trackId] = {
+      id: trackId,
+      path: fullPath,
+      filename: entryName,
+      title: entryName.replace(/\.[^/.]+$/, ''),
+      artist: 'Unknown',
+      albumArtist: '',
+      album: '',
+      year: null,
+      duration: 0,
+      genre: null,
+      hasCover: false,
+    };
+  }
+}
+
 async function scanDirectory(dir, excludeFolders, seenPaths) {
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch (e) {
-    console.warn(`Cannot read directory: ${dir}`);
+    log.warn('cannot read directory', { dir });
     return;
   }
 
-  for (let ei = 0; ei < entries.length; ei++) {
-    const entry = entries[ei];
+  // Split into subdirectories and audio files so we can parallelize the
+  // audio parses (the slow part) and recurse into folders separately.
+  const subdirs = [];
+  const audioFiles = [];
+  for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
-
-    // Yield every 50 files to keep event loop responsive (visualizer, WS)
-    if (ei % 50 === 0) await new Promise(r => setImmediate(r));
-
     if (entry.isDirectory()) {
       if (excludeFolders.has(entry.name.toLowerCase())) continue;
-      await scanDirectory(fullPath, excludeFolders, seenPaths);
+      subdirs.push(fullPath);
     } else if (AUDIO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
-      const trackId = getOrAssignTrackId(fullPath);
+      audioFiles.push({ fullPath, entryName: entry.name });
       if (seenPaths) seenPaths.add(fullPath);
-      let mtimeMs = 0;
-      try { mtimeMs = fs.statSync(fullPath).mtimeMs; } catch (e) { /* ignore */ }
-      try {
-        // Skip metadata re-parse when the file mtime matches a cached cover —
-        // we still parse for tags (cheap), but we avoid re-decoding/writing the
-        // picture buffer when nothing changed.
-        const cachedCoverPath = findCachedCover(trackId, mtimeMs);
-        const metadata = await parseTrackMetadata(fullPath);
-        const genre = metadata.common.genre ? metadata.common.genre[0] : null;
-        if (genre) genres.add(genre);
-
-        const picture = metadata.common.picture && metadata.common.picture[0];
-        const hasCover = !!picture || !!cachedCoverPath;
-
-        if (picture && !cachedCoverPath) {
-          let ext = '.jpg';
-          if (picture.format) {
-            if (picture.format.includes('png')) ext = '.png';
-            else if (picture.format.includes('webp')) ext = '.webp';
-            else if (picture.format.includes('gif')) ext = '.gif';
-          }
-          writeCachedCover(trackId, ext, picture.data, mtimeMs);
-        }
-
-        // Extract ReplayGain in dB if the file has it. music-metadata stores
-        // it as { dB: -7.4, ratio: 0.42 } on common.replayGainTrackGain. We
-        // only keep the dB number — the renderer multiplies its target
-        // volume by 10^(rg/20) to even out track loudness.
-        let replayGain = null;
-        const rg = metadata.common && metadata.common.replayGainTrackGain;
-        if (rg && typeof rg.dB === 'number' && Number.isFinite(rg.dB)) {
-          replayGain = rg.dB;
-        }
-
-        const rawArtist = metadata.common.artist || 'Unknown';
-        const rawGenre = genre;
-
-        library[trackId] = {
-          id: trackId,
-          path: fullPath,
-          filename: entry.name,
-          title: metadata.common.title || entry.name.replace(/\.[^/.]+$/, ''),
-          artist: rawArtist,
-          // Pre-computed multi-tag splits — surfaced separately so the UI
-          // can render artist chips / multi-genre filters without parsing
-          // each render.
-          artists: multitag.splitArtistTag(rawArtist),
-          albumArtist: metadata.common.albumartist || '',
-          album: metadata.common.album || '',
-          year: metadata.common.year || null,
-          duration: metadata.format.duration || 0,
-          genre: rawGenre,
-          genres: multitag.splitGenreTag(rawGenre),
-          hasCover,
-          replayGain,
-        };
-      } catch (e) {
-        library[trackId] = {
-          id: trackId,
-          path: fullPath,
-          filename: entry.name,
-          title: entry.name.replace(/\.[^/.]+$/, ''),
-          artist: 'Unknown',
-          albumArtist: '',
-          album: '',
-          year: null,
-          duration: 0,
-          genre: null,
-          hasCover: false,
-        };
-      }
     }
+  }
+
+  // Parallel batch of audio file parses — concurrency tuned to the worker
+  // pool size when available, otherwise a small fixed number that lets I/O
+  // and CPU overlap on the main thread.
+  const concurrency = (scannerPool && scannerPool.available()) ? scannerPool.size * 2 : 8;
+  for (let i = 0; i < audioFiles.length; i += concurrency) {
+    const slice = audioFiles.slice(i, i + concurrency);
+    await Promise.all(slice.map(f => ingestAudioFile(f.fullPath, f.entryName)));
+    // Yield back to the event loop between batches so the WS / viz keep
+    // breathing while a big folder is being parsed.
+    await new Promise(r => setImmediate(r));
+  }
+
+  // Recurse into subdirectories sequentially (parallelizing here would
+  // multiply the parallel parse workload by the depth of the tree).
+  for (const sub of subdirs) {
+    await scanDirectory(sub, excludeFolders, seenPaths);
   }
 }
 
