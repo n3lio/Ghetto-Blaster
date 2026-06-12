@@ -2466,3 +2466,280 @@ if ('serviceWorker' in navigator && !window.resonance) {
     });
   } catch (e) { /* ignore */ }
 })();
+
+// ─── Mini-player toggle (?mini=1) ──────────────────────────────────────────
+// Adds the `mini` class to <body> when the URL has ?mini=1, which the CSS
+// in style.css uses to swap to the compact layout. Toggled by the Electron
+// mini-player window which loads /?mini=1.
+(function setupMiniMode() {
+  try {
+    var url = new URL(location.href);
+    if (url.searchParams.get('mini') === '1') {
+      document.body.classList.add('mini');
+    }
+  } catch (e) { /* ignore */ }
+})();
+
+// ─── ReplayGain ────────────────────────────────────────────────────────────
+// Smooth out loudness differences between tracks. We don't insert a Web Audio
+// GainNode (the EQ chain is already in place) — instead we keep a multiplier
+// on `audio.volume` derived from the track's RG track-gain tag (in dB). The
+// factor is capped at 1.0 so we never amplify above the user's chosen
+// volume — only attenuate. This matches what most ReplayGain-aware players
+// do by default and avoids clipping on quiet tracks.
+(function setupReplayGain() {
+  var audioEl = document.querySelector('audio');
+  if (!audioEl) return;
+  var rgFactor = 1;
+
+  function dbToFactor(db) {
+    if (typeof db !== 'number' || !isFinite(db)) return 1;
+    var factor = Math.pow(10, db / 20);
+    return Math.min(1, Math.max(0, factor));
+  }
+
+  function userVolume() {
+    var cfg = window._appConfig || {};
+    return typeof cfg.volume === 'number' ? cfg.volume : 1;
+  }
+
+  function applyTo(audio) {
+    if (!audio) return;
+    audio.volume = userVolume() * rgFactor;
+  }
+
+  // Hook into track changes via the audio src — we don't need to touch
+  // playCurrentTrack() this way.
+  var lastSrc = '';
+  function refresh() {
+    if (!audioEl.src || audioEl.src === lastSrc) return;
+    lastSrc = audioEl.src;
+    var m = /\/api\/stream\/(\d+)/.exec(audioEl.src);
+    if (!m) { rgFactor = 1; applyTo(audioEl); return; }
+    var trackId = parseInt(m[1], 10);
+    var lib = window.library || (window.tracks && window.tracks.list);
+    var track = null;
+    if (Array.isArray(lib)) track = lib.find(function(t) { return t && t.id === trackId; });
+    rgFactor = (track && track.replayGain != null) ? dbToFactor(track.replayGain) : 1;
+    applyTo(audioEl);
+  }
+
+  audioEl.addEventListener('loadstart', refresh);
+  setInterval(refresh, 250); // cheap safety net for missed loadstart events
+})();
+
+// ─── EQ preset persistence ─────────────────────────────────────────────────
+// `_appConfig.eqPreset` holds the last selected preset name. Restored on boot
+// once the EQ has been initialised, re-saved whenever the user picks a new
+// one. Custom slider gains are not persisted (yet) — only the preset.
+(function setupEqPersist() {
+  var sel = document.getElementById('eqPreset');
+  if (!sel) return;
+
+  sel.addEventListener('change', function() {
+    var cfg = window._appConfig = window._appConfig || {};
+    cfg.eqPreset = sel.value;
+    if (window.resonance && window.resonance.setConfig) {
+      window.resonance.setConfig({ eqPreset: sel.value });
+    }
+  });
+
+  function tryRestore() {
+    var cfg = window._appConfig || {};
+    if (!cfg.eqPreset) return;
+    if (sel.value === cfg.eqPreset) return;
+    sel.value = cfg.eqPreset;
+    sel.dispatchEvent(new Event('change'));
+  }
+  // _appConfig is populated asynchronously after window.resonance.getConfig()
+  // resolves, so retry until it's there.
+  var tries = 0;
+  var iv = setInterval(function() {
+    tries++;
+    if (window._appConfig || tries > 40) {
+      clearInterval(iv);
+      tryRestore();
+    }
+  }, 250);
+})();
+
+// ─── Drag & drop folders onto the window → add to musicFolders ────────────
+// Electron sets `webUtils.getPathForFile` on dropped File objects; that's the
+// only reliable way to recover the host path of a drop in modern Electron.
+// We try that first, fall back to file.path (older Electron), and otherwise
+// fall back to a toast hint. Drop a directory or one of its children — we
+// walk up to the parent folder for a single-file drop so the rescan picks
+// up the whole album.
+(function setupFileDrop() {
+  if (typeof document === 'undefined') return;
+
+  function pathFromFile(file) {
+    try {
+      if (window.resonance && typeof window.resonance.dropPath === 'function') {
+        return window.resonance.dropPath(file);
+      }
+    } catch (e) { /* ignore */ }
+    // Older Electron exposed `file.path` directly; modern stacks return ''.
+    if (file && typeof file.path === 'string' && file.path) return file.path;
+    return null;
+  }
+
+  function showToast(msg) {
+    if (typeof window.toast === 'function') return window.toast(msg);
+    // Cheap fallback: console.
+    console.log('[drop]', msg);
+  }
+
+  function dirnameOf(p) {
+    if (typeof p !== 'string' || !p) return p;
+    var slash = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+    if (slash === -1) return p;
+    return p.slice(0, slash);
+  }
+
+  document.addEventListener('dragover', function(e) {
+    if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.indexOf('Files') !== -1) {
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener('drop', function(e) {
+    if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    e.preventDefault();
+    var files = Array.from(e.dataTransfer.files);
+    var folders = new Set();
+    var unresolved = 0;
+    files.forEach(function(f) {
+      var p = pathFromFile(f);
+      if (!p) { unresolved++; return; }
+      // Heuristic: if it's a folder (no extension on the basename), use as-is.
+      // Otherwise use its parent so we add the album folder, not a single file.
+      var base = p.split(/[\\/]/).pop() || '';
+      var folder = base.indexOf('.') === -1 ? p : dirnameOf(p);
+      if (folder) folders.add(folder);
+    });
+    if (folders.size === 0) {
+      showToast(unresolved
+        ? 'Drop folders directly to add them (this build can\'t resolve file paths).'
+        : 'Nothing to add.');
+      return;
+    }
+    // Merge with current config and rescan.
+    if (!window.resonance || !window.resonance.getConfig || !window.resonance.setConfig) {
+      showToast('Folder drop only works in the desktop app.');
+      return;
+    }
+    window.resonance.getConfig().then(function(cfg) {
+      var existing = (cfg && cfg.musicFolders) || [];
+      var merged = Array.from(new Set(existing.concat(Array.from(folders))));
+      var added = merged.length - existing.length;
+      if (added === 0) {
+        showToast('Folder already in library.');
+        return;
+      }
+      window.resonance.setConfig({ musicFolders: merged }).then(function() {
+        showToast('Added ' + added + ' folder' + (added > 1 ? 's' : '') + ' — rescanning...');
+        fetch('/api/rescan', { method: 'POST' }).catch(function() {});
+      });
+    });
+  });
+})();
+
+// ─── Drag & drop reorder for the queue ─────────────────────────────────────
+// The legacy queue UI renders rows as `.track-item` in `#queueList`. We wire
+// drag handles on each row and post the new order to the server so other
+// clients see it too. Falls back gracefully on touch-only mobile (the existing
+// long-press menu handles reorder there).
+(function setupQueueReorder() {
+  var list = document.getElementById('queueList');
+  if (!list) return;
+
+  var dragSrcIndex = null;
+
+  function rowsAreDraggable() {
+    var rows = list.querySelectorAll('.track-item');
+    rows.forEach(function(row, idx) {
+      if (row.getAttribute('draggable') === 'true') return;
+      row.setAttribute('draggable', 'true');
+      row.dataset.queueIdx = String(idx);
+    });
+  }
+
+  // Re-arm whenever the queue panel is shown — cheap and safe.
+  document.addEventListener('click', function(e) {
+    if (e.target && e.target.closest && e.target.closest('[data-tab]')) {
+      setTimeout(rowsAreDraggable, 50);
+    }
+  });
+  // Re-arm on DOM mutations inside the queue list.
+  if (typeof MutationObserver !== 'undefined') {
+    var obs = new MutationObserver(rowsAreDraggable);
+    obs.observe(list, { childList: true });
+  }
+  rowsAreDraggable();
+
+  list.addEventListener('dragstart', function(e) {
+    var row = e.target.closest && e.target.closest('.track-item');
+    if (!row) return;
+    var rows = Array.from(list.querySelectorAll('.track-item'));
+    dragSrcIndex = rows.indexOf(row);
+    row.classList.add('dragging');
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+  });
+
+  list.addEventListener('dragover', function(e) {
+    var row = e.target.closest && e.target.closest('.track-item');
+    if (!row || dragSrcIndex == null) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  });
+
+  list.addEventListener('drop', function(e) {
+    var row = e.target.closest && e.target.closest('.track-item');
+    if (!row || dragSrcIndex == null) return;
+    e.preventDefault();
+    var rows = Array.from(list.querySelectorAll('.track-item'));
+    var dropIndex = rows.indexOf(row);
+    if (dropIndex === dragSrcIndex || dropIndex === -1) return;
+    if (!Array.isArray(window.queue)) return;
+    var moved = window.queue.splice(dragSrcIndex, 1)[0];
+    window.queue.splice(dropIndex, 0, moved);
+    // Adjust currentIndex so playback stays on the same track.
+    if (typeof window.currentIndex === 'number') {
+      if (window.currentIndex === dragSrcIndex) window.currentIndex = dropIndex;
+      else if (dragSrcIndex < window.currentIndex && dropIndex >= window.currentIndex) window.currentIndex--;
+      else if (dragSrcIndex > window.currentIndex && dropIndex <= window.currentIndex) window.currentIndex++;
+    }
+    if (typeof window.renderQueue === 'function') window.renderQueue();
+    // Persist server-side.
+    fetch('/api/queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackIds: window.queue }),
+    }).catch(function() {});
+  });
+
+  list.addEventListener('dragend', function(e) {
+    var row = e.target.closest && e.target.closest('.track-item');
+    if (row) row.classList.remove('dragging');
+    dragSrcIndex = null;
+  });
+})();
+
+// ─── Crossfade safety: restore volume on manual pause ──────────────────────
+// The legacy crossfade uses setInterval to step `audio.volume` toward 0. If
+// the user hits pause mid-ramp, the volume is left at a partial level so the
+// next play starts barely audible. Restore the user's target volume on pause
+// when no automatic fade is in flight.
+(function setupCrossfadeSafety() {
+  var audioEl = document.querySelector('audio');
+  if (!audioEl) return;
+  audioEl.addEventListener('pause', function() {
+    if (typeof window.crossfadeTriggered !== 'undefined' && window.crossfadeTriggered) return;
+    var cfg = window._appConfig || {};
+    var target = typeof cfg.volume === 'number' ? cfg.volume : 1;
+    if (audioEl.volume < target * 0.5) {
+      audioEl.volume = target;
+    }
+  });
+})();

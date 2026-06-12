@@ -739,3 +739,118 @@
       .window-controls { display: none !important; }
       .track-item .add-btn { opacity: 0.7; }
     }
+
+/* ─── Accessibility: prefers-reduced-motion ───────────────────────────────
+   Respect the OS-level "reduce motion" setting. We blanket-disable the most
+   expensive transforms (gradient cycles, infinite spins, pulses) but keep
+   short opacity transitions so the UI still feels alive — sudden state
+   changes are jarring even for reduced-motion users.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Keep short opacity transitions readable. */
+  .toast, .modal-overlay, #aboutModal {
+    transition: opacity 0.15s linear !important;
+  }
+  /* Pause continuous backgrounds. */
+  h1, .scan-indicator, .splash::before {
+    animation: none !important;
+  }
+}
+
+/* ─── Drag & drop visual feedback ─────────────────────────────────────────
+   Used by the queue reorder + playlist reorder code in js/main.js. */
+.track-item.dragging,
+.playlist-card.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+/* ─── Mini-player layout (?mini=1) ────────────────────────────────────────
+   Triggered by adding `mini` to <body>. Hides the header, tabs, and main
+   panels and renders a compact strip with cover + title/artist + transport
+   controls + progress bar. Sized for a 360×120 always-on-top window.
+*/
+body.mini {
+  overflow: hidden;
+}
+body.mini header,
+body.mini .tabs,
+body.mini .main-area,
+body.mini .splash,
+body.mini #updateBadge,
+body.mini #scanIndicator,
+body.mini #serverPill,
+body.mini .settings-btn,
+body.mini .window-controls,
+body.mini .mode-toggle {
+  display: none !important;
+}
+body.mini .player-bar {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(15, 14, 13, 0.96);
+  backdrop-filter: blur(10px);
+}
+body.mini .player-cover {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+}
+body.mini .player-info {
+  flex: 1;
+  min-width: 0;
+}
+body.mini .player-info .player-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.mini .player-info .player-artist {
+  font-size: 0.78rem;
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.mini .player-controls {
+  gap: 6px;
+}
+body.mini .player-controls button {
+  width: 28px;
+  height: 28px;
+}
+body.mini .progress-container {
+  width: 100%;
+  margin: 0;
+}
+body.mini .volume-control {
+  display: none !important;
+}
+body.mini .player-bar > .player-cover,
+body.mini .player-bar > .player-info,
+body.mini .player-bar > .player-controls {
+  align-self: flex-start;
+}
+
+/* Top row: cover + info + controls; bottom row: progress bar full width. */
+body.mini .player-bar {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+body.mini .player-bar .progress-container {
+  flex-basis: 100%;
+}

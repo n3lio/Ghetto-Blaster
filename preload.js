@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('resonance', {
   // Window controls
@@ -11,6 +11,18 @@ contextBridge.exposeInMainWorld('resonance', {
 
   // Mini-player toggle
   toggleMiniPlayer: () => ipcRenderer.invoke('miniplayer:toggle'),
+
+  // Drag & drop: resolve the host filesystem path of a dropped File. Modern
+  // Electron (>=32) requires going through webUtils — older builds left
+  // file.path populated, but we plan to track Electron HEAD.
+  dropPath: (file) => {
+    try {
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        return webUtils.getPathForFile(file);
+      }
+    } catch (e) { /* ignore */ }
+    return file && file.path ? file.path : null;
+  },
 
   // Config / Settings
   getConfig: () => ipcRenderer.invoke('config:get'),

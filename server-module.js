@@ -12,6 +12,10 @@ const playlistLib = require('./lib/playlists');
 const { ScannerPool } = require('./lib/scanner-pool');
 const { setLogConfig, getLogger } = require('./lib/logger');
 const { buildMockLibrary, buildMockGenres } = require('./lib/mock-library');
+const migrations = require('./lib/migrations');
+const backupLib = require('./lib/backup');
+const m3u = require('./lib/m3u');
+let backupTimer = null;
 let log = getLogger();
 let scannerPool = null;
 // chokidar is more reliable than fs.watch (esp. recursive on Windows)
@@ -54,9 +58,25 @@ function createDefaultPlaylists() {
 
 function setDataDir(dir) {
   DATA_DIR = dir;
-  // Reload config + playlists + history from the correct location
+  // Reload config from the correct location first so the logger has its
+  // settings before migrations log anything.
   config = loadConfig();
   ensureAuthToken();
+  // Wire the logger up early so migration steps land in the persistent log.
+  log = setLogConfig({
+    dir: path.join(DATA_DIR, 'logs'),
+    level: (config && config.logLevel) || 'info',
+    pretty: !!(config && config.devMode),
+    name: 'server',
+  });
+  // Apply any pending JSON schema migrations before loading the files. Each
+  // migration snapshots its target into `migrations-backup/` so a botched
+  // run can be reverted by hand.
+  try {
+    migrations.migrateAll(DATA_DIR, log);
+  } catch (e) {
+    log.error('migrations: aborted', { error: e.message });
+  }
   libraryIds = loadLibraryIds();
   playlists = loadPlaylists();
   history = loadHistory();
@@ -65,14 +85,10 @@ function setDataDir(dir) {
   // Ensure covers dir exists
   const coversDir = path.join(DATA_DIR, '__covers');
   if (!fs.existsSync(coversDir)) fs.mkdirSync(coversDir, { recursive: true });
-  // Wire the logger to userData/logs/ so we keep a persistent trace across
-  // runs. Pretty-print to stderr in dev, JSON-only on disk otherwise.
-  log = setLogConfig({
-    dir: path.join(DATA_DIR, 'logs'),
-    level: (config && config.logLevel) || 'info',
-    pretty: !!(config && config.devMode),
-    name: 'server',
-  });
+  // Schedule daily backups (best-effort, unref'd timer so it can't keep the
+  // process alive on quit).
+  if (backupTimer) backupTimer.stop();
+  backupTimer = backupLib.startScheduledBackups(DATA_DIR, log);
   log.info('data dir set', { dir });
 }
 
@@ -102,18 +118,25 @@ function loadLibraryIds() {
     const p = getLibraryIdsPath();
     if (fs.existsSync(p)) {
       const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-      if (data && typeof data === 'object' && data.paths && typeof data.nextId === 'number') {
-        return data;
-      }
+      // Accept both the v1 wrapped shape and the legacy bare shape — migrations
+      // run before this point but be defensive in case a user side-loads an
+      // older file.
+      const paths = (data && data.paths) || {};
+      const nextId = (data && typeof data.nextId === 'number') ? data.nextId : 0;
+      return { paths, nextId };
     }
-  } catch (e) { console.warn('Could not load library-ids:', e.message); }
+  } catch (e) { (log || console).warn('library-ids load failed', { error: e.message }); }
   return { paths: {}, nextId: 0 };
 }
 
 function saveLibraryIds() {
   try {
-    fs.writeFileSync(getLibraryIdsPath(), JSON.stringify(libraryIds, null, 2));
-  } catch (e) { console.warn('Could not save library-ids:', e.message); }
+    fs.writeFileSync(getLibraryIdsPath(), JSON.stringify({
+      _version: migrations.LATEST['library-ids.json'],
+      paths: libraryIds.paths,
+      nextId: libraryIds.nextId,
+    }, null, 2));
+  } catch (e) { (log || console).warn('library-ids save failed', { error: e.message }); }
 }
 
 function getOrAssignTrackId(canonicalPath) {
@@ -167,14 +190,18 @@ function loadPlaylists() {
   try {
     var p = getPlaylistsPath();
     if (fs.existsSync(p)) {
-      return JSON.parse(fs.readFileSync(p, 'utf8'));
+      const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+      return migrations.unwrap(raw, 'items');
     }
-  } catch (e) { console.warn('Could not load playlists:', e.message); }
+  } catch (e) { (log || console).warn('playlists load failed', { error: e.message }); }
   return [];
 }
 
 function savePlaylists() {
-  fs.writeFileSync(getPlaylistsPath(), JSON.stringify(playlists, null, 2));
+  fs.writeFileSync(getPlaylistsPath(), JSON.stringify({
+    _version: migrations.LATEST['playlists.json'],
+    items: playlists,
+  }, null, 2));
 }
 
 // ─── History ────────────────────────────────────────────────────────────────
@@ -184,13 +211,19 @@ let history = loadHistory();
 function loadHistory() {
   try {
     var p = getHistoryPath();
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (fs.existsSync(p)) {
+      const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+      return migrations.unwrap(raw, 'entries');
+    }
   } catch (e) {}
   return [];
 }
 
 function saveHistory() {
-  fs.writeFileSync(getHistoryPath(), JSON.stringify(history.slice(0, 5000), null, 2));
+  fs.writeFileSync(getHistoryPath(), JSON.stringify({
+    _version: migrations.LATEST['history.json'],
+    entries: history.slice(0, 5000),
+  }, null, 2));
 }
 
 // ─── Favorites ──────────────────────────────────────────────────────────────
@@ -198,13 +231,22 @@ function getFavoritesPath() { return path.join(DATA_DIR, 'favorites.json'); }
 let favorites = loadFavorites();
 
 function loadFavorites() {
-  try { var p = getFavoritesPath(); if (fs.existsSync(p)) return new Set(JSON.parse(fs.readFileSync(p, 'utf8'))); }
-  catch(e) {}
+  try {
+    var p = getFavoritesPath();
+    if (fs.existsSync(p)) {
+      const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+      const ids = migrations.unwrap(raw, 'ids');
+      return new Set(Array.isArray(ids) ? ids : []);
+    }
+  } catch(e) {}
   return new Set();
 }
 
 function saveFavorites() {
-  fs.writeFileSync(getFavoritesPath(), JSON.stringify([...favorites]));
+  fs.writeFileSync(getFavoritesPath(), JSON.stringify({
+    _version: migrations.LATEST['favorites.json'],
+    ids: [...favorites],
+  }));
 }
 
 function logPlay(trackId) {
@@ -405,6 +447,16 @@ async function scanDirectory(dir, excludeFolders, seenPaths) {
           writeCachedCover(trackId, ext, picture.data, mtimeMs);
         }
 
+        // Extract ReplayGain in dB if the file has it. music-metadata stores
+        // it as { dB: -7.4, ratio: 0.42 } on common.replayGainTrackGain. We
+        // only keep the dB number — the renderer multiplies its target
+        // volume by 10^(rg/20) to even out track loudness.
+        let replayGain = null;
+        const rg = metadata.common && metadata.common.replayGainTrackGain;
+        if (rg && typeof rg.dB === 'number' && Number.isFinite(rg.dB)) {
+          replayGain = rg.dB;
+        }
+
         library[trackId] = {
           id: trackId,
           path: fullPath,
@@ -417,6 +469,7 @@ async function scanDirectory(dir, excludeFolders, seenPaths) {
           duration: metadata.format.duration || 0,
           genre: genre,
           hasCover,
+          replayGain,
         };
       } catch (e) {
         library[trackId] = {
@@ -646,7 +699,23 @@ function startServer(port) {
           (t.genre && t.genre.toLowerCase().includes(q))
         );
       }
+      // Optional pagination — clients that want everything in one shot can
+      // skip both params (legacy behavior). Lazy-loaders pass `offset` and
+      // `limit` and read `X-Total-Count` from the response headers.
+      const total = results.length;
+      const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+      const limit = Math.max(0, parseInt(req.query.limit, 10) || 0);
+      if (limit > 0) {
+        results = results.slice(offset, offset + limit);
+      }
+      res.set('X-Total-Count', String(total));
       res.json(results.map(({ path: _, ...rest }) => ({ ...rest, favorited: favorites.has(rest.id) })));
+    });
+
+    // Cheap counter for clients that want to decide between eager and lazy
+    // load without first downloading the whole library.
+    app.get('/api/tracks/count', (req, res) => {
+      res.json({ count: trackCount() });
     });
 
     app.get('/api/genres', (req, res) => {
@@ -693,6 +762,16 @@ function startServer(port) {
         stat = fs.statSync(filePath);
       } catch (e) {
         return res.status(404).json({ error: 'File not found on disk' });
+      }
+      // Caching: include the file size + mtime in a weak ETag so clients can
+      // skip re-downloading unchanged tracks. Cache-Control 1h is short enough
+      // that file edits propagate quickly but long enough that mobile clients
+      // don't re-stream the same track in a session.
+      const etag = `W/"${stat.size}-${Math.floor(stat.mtimeMs)}"`;
+      res.set('ETag', etag);
+      res.set('Cache-Control', 'private, max-age=3600');
+      if (req.headers['if-none-match'] === etag) {
+        return res.status(304).end();
       }
       const ext = path.extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'audio/mpeg';
@@ -1259,6 +1338,148 @@ function startServer(port) {
       log.info('library cleared (dev)');
       broadcast({ type: 'library-updated', data: { count: 0 } });
       res.json({ ok: true });
+    });
+
+    // ─── Library export ────────────────────────────────────────────────────
+    function buildLibrarySnapshot() {
+      const out = [];
+      for (let i = 0; i < library.length; i++) {
+        const t = library[i];
+        if (!t) continue;
+        out.push({
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          albumArtist: t.albumArtist,
+          album: t.album,
+          year: t.year,
+          duration: t.duration,
+          genre: t.genre,
+          filename: t.filename,
+          favorited: favorites.has(t.id),
+        });
+      }
+      return out;
+    }
+
+    app.get('/api/library/export.json', (req, res) => {
+      res.set('Content-Disposition', 'attachment; filename="ghetto-blaster-library.json"');
+      res.json({
+        exportedAt: new Date().toISOString(),
+        count: trackCount(),
+        tracks: buildLibrarySnapshot(),
+      });
+    });
+
+    app.get('/api/library/export.csv', (req, res) => {
+      const rows = buildLibrarySnapshot();
+      const cols = ['id', 'title', 'artist', 'albumArtist', 'album', 'year', 'duration', 'genre', 'filename', 'favorited'];
+      const escape = (v) => {
+        if (v == null) return '';
+        const s = String(v);
+        // RFC 4180: quote if it contains ", , or newline; escape " by doubling.
+        if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+        return s;
+      };
+      const lines = [cols.join(',')];
+      for (const r of rows) lines.push(cols.map((c) => escape(r[c])).join(','));
+      res.set('Content-Type', 'text/csv; charset=utf-8');
+      res.set('Content-Disposition', 'attachment; filename="ghetto-blaster-library.csv"');
+      res.send(lines.join('\n') + '\n');
+    });
+
+    // ─── Playlist import (M3U/M3U8) ────────────────────────────────────────
+    app.post('/api/playlists/import-m3u', (req, res) => {
+      const body = req.body || {};
+      const { name, m3u: text } = body;
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ error: 'm3u (string content) required' });
+      }
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'name required' });
+      }
+      const entries = m3u.parseM3U(text);
+      const { matched, unresolved } = m3u.resolveAgainstLibrary(entries, library);
+      if (matched.length === 0) {
+        return res.status(400).json({
+          error: 'No tracks from the playlist matched the current library',
+          parsed: entries.length,
+          unresolved: unresolved.length,
+        });
+      }
+      const playlist = {
+        id: crypto.randomUUID(),
+        name: name.trim().slice(0, 100),
+        type: 'manual',
+        trackIds: matched.map(m => m.trackId),
+        createdAt: new Date().toISOString(),
+        importedFrom: 'm3u',
+      };
+      playlists.push(playlist);
+      savePlaylists();
+      log.info('playlist imported from m3u', {
+        name: playlist.name,
+        matched: matched.length,
+        unresolved: unresolved.length,
+      });
+      res.json({
+        ok: true,
+        playlist: { id: playlist.id, name: playlist.name, trackCount: matched.length },
+        unresolved: unresolved.slice(0, 50),
+        unresolvedTotal: unresolved.length,
+      });
+    });
+
+    // ─── Backups ───────────────────────────────────────────────────────────
+    app.get('/api/backups', (req, res) => {
+      res.json({ backups: backupLib.listBackups(DATA_DIR) });
+    });
+
+    app.post('/api/backups', (req, res) => {
+      const result = backupLib.backupNow(DATA_DIR, log);
+      if (!result.ok) return res.status(500).json(result);
+      res.json(result);
+    });
+
+    app.post('/api/backups/restore', (req, res) => {
+      const { date } = req.body || {};
+      if (!date) return res.status(400).json({ error: 'date required' });
+      const result = backupLib.restoreFrom(DATA_DIR, date, log);
+      if (!result.ok) return res.status(400).json(result);
+      // Reload everything from disk now that the files have been replaced.
+      libraryIds = loadLibraryIds();
+      playlists = loadPlaylists();
+      history = loadHistory();
+      favorites = loadFavorites();
+      config = loadConfig();
+      broadcast({ type: 'library-updated', data: { count: trackCount() } });
+      res.json(result);
+    });
+
+    // ─── Folder stats ──────────────────────────────────────────────────────
+    // For each configured musicFolder, count the tracks whose path falls
+    // under it. Useful in Settings to confirm a scan picked up what the user
+    // expects from each root.
+    app.get('/api/stats/folders', (req, res) => {
+      const folders = (config.musicFolders || []).map(f => path.resolve(f));
+      const counts = folders.map(() => 0);
+      for (let i = 0; i < library.length; i++) {
+        const t = library[i];
+        if (!t || !t.path) continue;
+        for (let j = 0; j < folders.length; j++) {
+          // Use path.relative to handle trailing slashes consistently across
+          // platforms.
+          const rel = path.relative(folders[j], t.path);
+          if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+            counts[j]++;
+            break;
+          }
+        }
+      }
+      res.json({
+        folders: folders.map((f, i) => ({ path: f, tracks: counts[i] })),
+        unrooted: trackCount() - counts.reduce((a, b) => a + b, 0),
+      });
     });
 
     // Theme (for mobile to sync accent color)

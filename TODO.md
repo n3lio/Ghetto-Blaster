@@ -60,11 +60,11 @@
 
 ## 🎵 Features player (desktop)
 
-- [ ] **Crossfade configurable** *(P1)* — vérifier l'implémentation actuelle, polish.
+- [x] ~~**Crossfade configurable**~~ *(P1)* — implé déjà OK (settings.crossfade + duration). v3.9 : ajout safety `pause` qui restore le volume cible si pause manuelle pendant le ramp.
 - [ ] **Gapless playback** *(P2)* — utile pour DJ sets / albums live.
-- [ ] **Égaliseur : sauvegarder le preset utilisateur** *(P2)* — vérifier que ça persiste au redémarrage.
+- [x] ~~**Égaliseur : sauvegarder le preset utilisateur**~~ *(P2)* — `_appConfig.eqPreset`, restauré au boot, sauvé à chaque change.
 - [ ] **Pitch / speed control** *(P3)* — utile pour DJ.
-- [ ] **ReplayGain / normalisation volume** *(P2)* — éviter les sauts entre pistes. Côté renderer : Web Audio gain dynamique basé sur les tags ReplayGain extraits par music-metadata.
+- [x] ~~**ReplayGain / normalisation volume**~~ *(P2)* — extracteur `track.replayGain` (dB) côté serveur, factor multiplicatif sur audio.volume côté renderer (capé à 1 pour éviter clipping).
 - [ ] **Sleep timer** *(P3)*.
 - [ ] **Mode "radio"** *(P3)* — auto-queue similaire à la track en cours (genre, artiste).
 - [ ] **Lyrics auto-fetch** *(P2)* — vérifier l'état actuel ; si LRC pas disponible, fallback vers une API.
@@ -81,15 +81,15 @@
 
 ## 🎨 UI / UX
 
-- [ ] **Drag & drop fichiers/dossiers sur la fenêtre** *(P2)* — pour ajouter à la queue ou à une playlist.
+- [x] ~~**Drag & drop fichiers/dossiers sur la fenêtre**~~ *(P2)* — drop dossiers (ou fichiers, on remonte au parent) → ajout à `musicFolders` + rescan auto. preload expose `dropPath` via `webUtils.getPathForFile`.
 - [ ] **Vue "Year"** *(P3)* — frise chronologique des albums.
 - [ ] **Vue "Genres" rich** *(P3)* — pas juste un filtre, une vraie page d'exploration.
 - [ ] **Recherche : opérateurs** *(P3)* — `artist:NTM`, `genre:rap`, `year:2010..2015`.
-- [~] **Mode mini-player** *(P2)* — fenêtre Electron compacte always-on-top branchée (tray menu + IPC `miniplayer:toggle`). Layout compact côté renderer (`?mini=1`) reste à designer.
+- [x] ~~**Mode mini-player**~~ *(P2)* — fenêtre Electron + `body.mini` CSS layout compact (cover 56px + info + transport + progress full-width). Toggle via tray menu ou IPC `miniplayer:toggle`.
 - [ ] **Onboarding première utilisation** *(P2)* — petit tour guidé après install.
-- [ ] **Drag & drop reorder de la queue** *(P2)* — vérifier si déjà OK partout (desktop + mobile).
+- [x] ~~**Drag & drop reorder de la queue**~~ *(P2)* — handlers dragstart/dragover/drop sur `.track-item`, MutationObserver pour rearmer après render, push `/api/queue` après reorder. Mobile reste sur le menu long-press existant.
 - [ ] **Theme : dark/light/auto** *(P3)* — actuellement dark only ; ajouter light theme.
-- [ ] **Animations réduites (prefers-reduced-motion)** *(P2)*.
+- [x] ~~**Animations réduites (prefers-reduced-motion)**~~ *(P2)* — `@media (prefers-reduced-motion: reduce)` désactive transforms/spins/pulses, garde transitions opacity courtes.
 - [ ] **A11y : navigation clavier complète + ARIA** *(P2)*.
 
 ## 🎧 Visualizers
@@ -104,18 +104,18 @@
 - [~] **Édition de tags** *(P2)* — endpoint `PUT /api/tracks/:id/tags` stub (501) en place. Reste à brancher une lib write-back (`node-id3` pour MP3, format-spécifique pour FLAC).
 - [ ] **Tags multiples par track** *(P2)* — déjà partiellement (split multi-artist).
 - [x] ~~**Détection des doublons**~~ *(P2)* — `/api/duplicates` et `/api/duplicates/preview` (groupes par titre+artiste+durée arrondie).
-- [ ] **Statistiques par dossier** *(P3)*.
+- [x] ~~**Statistiques par dossier**~~ *(P3)* — `GET /api/stats/folders` renvoie tracks count par folder + unrooted.
 - [ ] **Historique illimité avec pagination** *(P3)* — actuellement cap à 5000.
-- [ ] **Export bibliothèque (CSV/JSON)** *(P2)* — utile pour backup/migration.
-- [ ] **Import M3U / M3U8** *(P2)*.
+- [x] ~~**Export bibliothèque (CSV/JSON)**~~ *(P2)* — `GET /api/library/export.{json,csv}` (RFC 4180 escape pour CSV).
+- [x] ~~**Import M3U / M3U8**~~ *(P2)* — `POST /api/playlists/import-m3u`, parser `lib/m3u.js` (BOM, CRLF, EXTINF), résolution par `/api/stream/<id>` puis `(artist,title)` puis basename, tests 9/9.
 - [x] ~~**Export playlist M3U**~~ *(P2)* — `GET /api/playlists/:id/export.m3u`.
 - [ ] **Last.fm scrobbling** *(P3)*.
 
 ## 💾 Données / persistance
 
-- [ ] **Migrations de schéma** *(P1)* — quand tu changes le format de `playlists.json` / `history.json`, prévoir un mécanisme.
-- [ ] **Backup auto** *(P2)* — copie quotidienne des JSON dans `userData/backups/` (rotation 7 jours).
-- [ ] **Restore depuis backup** *(P2)* — UI dans Settings.
+- [x] ~~**Migrations de schéma**~~ *(P1)* — `lib/migrations.js` versionne playlists/history/favorites/library-ids. Backup snapshot avant migration. Tests 7/7.
+- [x] ~~**Backup auto**~~ *(P2)* — `lib/backup.js` snapshot quotidien `userData/backups/<YYYY-MM-DD>/`, rotation 7j, scheduled au boot.
+- [x] ~~**Restore depuis backup**~~ *(P2)* — `POST /api/backups/restore` avec `.before-restore-<stamp>` aside des live files. UI Settings reste à câbler côté renderer.
 - [ ] **Sync entre 2 PCs** *(P3)* — option avancée, via dossier partagé / cloud.
 
 ## ⚡ Performance
@@ -123,9 +123,9 @@
 - [x] ~~**Découper `index.html`**~~ *(P1)* — CSS extrait dans `style.css`, JS inline (~2470 lignes) extrait dans `public/js/main.js`. `index.html` à 436 lignes.
 - [x] ~~**Bundler frontend (esbuild/vite)**~~ *(P2)* — esbuild setup en `scripts/build-frontend.js` (`npm run build:frontend`/`watch:frontend`). Pas wired dans le build prod par défaut, dispo pour quand on splitte main.js en sous-modules.
 - [x] ~~**Scan en worker thread**~~ *(P2)* — pool `lib/scanner-pool.js`, opt-in via `config.scanInWorker`.
-- [ ] **Lazy-load library côté UI** *(P2)* — si > 10k tracks, ne pas tout envoyer d'un coup.
+- [~] **Lazy-load library côté UI** *(P2)* — pagination serveur prête (`?offset&limit` + `X-Total-Count` + `/api/tracks/count`). Frontend reste à brancher pour switch eager→lazy au-delà d'un seuil.
 - [x] ~~**WebSocket : debounce broadcasts d'état**~~ *(P2)* — fenêtre 80ms, collapse les bursts state/desktop:state/users:changed.
-- [ ] **Cache HTTP côté covers/streams** *(P2)* — déjà partiel (Cache-Control 7j sur covers), à propager.
+- [x] ~~**Cache HTTP côté covers/streams**~~ *(P2)* — ETag `W/"<size>-<mtime>"` + `Cache-Control: private, max-age=3600` sur `/api/stream`, support 304 sur `If-None-Match`.
 
 ## 🔧 Dev experience
 
