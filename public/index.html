@@ -1171,6 +1171,50 @@
 
 <script src="visualizer.js"></script>
 <script>
+// ─── Auth (LAN access token) ────────────────────────────────────────────────
+// Mobile clients land on /?t=TOKEN (from QR code). We snatch the token from the
+// URL, hide it from the address bar, and attach it to every API call.
+// Desktop loads localhost — server bypasses auth there, so AUTH_TOKEN may be ''.
+var AUTH_TOKEN = (function() {
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var t = params.get('t');
+    if (t) {
+      // Strip ?t= from URL bar so it doesn't get shared/screenshotted.
+      params.delete('t');
+      var clean = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+      window.history.replaceState({}, '', clean);
+      try { sessionStorage.setItem('gb_auth_token', t); } catch(e) {}
+      return t;
+    }
+    try { return sessionStorage.getItem('gb_auth_token') || ''; } catch(e) { return ''; }
+  } catch(e) { return ''; }
+})();
+
+// Append ?t=TOKEN to a URL — for <img>/<audio> tags that can't set headers.
+function apiUrl(path) {
+  if (!AUTH_TOKEN) return path;
+  return path + (path.indexOf('?') === -1 ? '?' : '&') + 't=' + encodeURIComponent(AUTH_TOKEN);
+}
+// Specialized helpers (tiny but make call-sites readable).
+function coverUrl(id) { return apiUrl('/api/cover/' + id); }
+function streamUrl(id) { return apiUrl('/api/stream/' + id); }
+
+// Wrap fetch so every /api/* call carries the Authorization header.
+(function() {
+  var _fetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    if (!AUTH_TOKEN) return _fetch(input, init);
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (url.indexOf('/api/') === -1) return _fetch(input, init);
+    init = init || {};
+    var headers = new Headers(init.headers || {});
+    if (!headers.has('Authorization')) headers.set('Authorization', 'Bearer ' + AUTH_TOKEN);
+    init.headers = headers;
+    return _fetch(input, init);
+  };
+})();
+
 // ─── State ───────────────────────────────────────────────────────────────────
 var tracks = [];        // Currently displayed/filtered tracks in Library
 var trackCache = {};    // ID → track object (all tracks ever seen)
@@ -1305,7 +1349,7 @@ function appendTrackBatch(list) {
   for (var i = renderedCount; i < end; i++) {
     var t = tracks[i];
     var coverHtml = t.hasCover
-      ? '<div class="track-cover"><img src="/api/cover/' + t.id + '" loading="lazy"></div>'
+      ? '<div class="track-cover"><img src="' + coverUrl(t.id) + '" loading="lazy"></div>'
       : '<div class="track-cover"><div class="ph">' + PLACEHOLDER_SVG + '</div></div>';
     html += '<div class="track-item" data-id="' + t.id + '">' +
       coverHtml +
@@ -1407,7 +1451,7 @@ function appendRemoteQueueBatch(list, sci) {
     var t = remoteQueueData[i];
     var realIdx = t.qindex != null ? t.qindex : i;
     var coverHtml = t.hasCover
-      ? '<div class="track-cover"><img src="/api/cover/' + t.id + '" loading="lazy"></div>'
+      ? '<div class="track-cover"><img src="' + coverUrl(t.id) + '" loading="lazy"></div>'
       : '<div class="track-cover"><div class="ph">' + PLACEHOLDER_SVG + '</div></div>';
     html += '<div class="track-item ' + (realIdx === sci ? 'playing' : '') + '" data-rindex="' + realIdx + '">' +
       coverHtml +
@@ -1498,7 +1542,7 @@ function appendQueueBatch(list) {
   for (var i = queueRenderedCount; i < end; i++) {
     var t = getTrack(queue[i]) || { id: queue[i], title: 'Unknown', artist: '', hasCover: false, duration: 0, genre: null };
     var coverHtml = t.hasCover
-      ? '<div class="track-cover"><img src="/api/cover/' + t.id + '" loading="lazy"></div>'
+      ? '<div class="track-cover"><img src="' + coverUrl(t.id) + '" loading="lazy"></div>'
       : '<div class="track-cover"><div class="ph">' + PLACEHOLDER_SVG + '</div></div>';
     html += '<div class="track-item ' + (i === currentIndex ? 'playing' : '') + '" data-qindex="' + i + '">' +
       coverHtml +
@@ -1674,7 +1718,7 @@ function renderAlbums() {
   list.innerHTML = albums.map(function(a) {
     var artistLabel = a.artists.length > 2 ? a.artists[0] + ' + ' + (a.artists.length - 1) + ' more' : a.artists.join(', ');
     var coverHtml = a.hasCover
-      ? '<div class="group-icon" style="background:none;overflow:hidden;border-radius:6px;"><img src="/api/cover/' + a.coverId + '" style="width:100%;height:100%;object-fit:cover;"></div>'
+      ? '<div class="group-icon" style="background:none;overflow:hidden;border-radius:6px;"><img src="' + coverUrl(a.coverId) + '" style="width:100%;height:100%;object-fit:cover;"></div>'
       : ALBUM_PH;
     return '<div class="group-card" data-album="' + esc(a.album) + '" data-tracks="' + a.tracks.join(',') + '">' +
       coverHtml + '<div><div class="group-name">' + esc(a.album) + '</div><div class="group-count">' + esc(artistLabel) + ' — ' + a.tracks.length + ' tracks</div></div>' +
@@ -2016,9 +2060,9 @@ function updateNowPlayingHero() {
     lastHeroTrackId = trackId;
     var cover = document.getElementById('npCover');
     if (track && track.hasCover && trackId != null) {
-      cover.innerHTML = '<img src="/api/cover/' + trackId + '">';
+      cover.innerHTML = '<img src="' + coverUrl(trackId) + '">';
       // Ambient background: extract cover colors
-      updateCoverAmbient('/api/cover/' + trackId);
+      updateCoverAmbient(coverUrl(trackId));
     } else {
       cover.innerHTML = HERO_PH;
       clearCoverAmbient();
@@ -2046,7 +2090,7 @@ function playCurrentTrack() {
   // Ensure AudioContext is resumed (needed for playback through viz pipeline)
   if (viz && viz.audioCtx && viz.audioCtx.state === 'suspended') viz.audioCtx.resume();
 
-  audio.src = '/api/stream/' + trackId;
+  audio.src = streamUrl(trackId);
   audio.load();
   audio.play().then(function() {
     isPlaying = true;
@@ -2066,7 +2110,7 @@ function playCurrentTrack() {
   updateNowPlayingHero();
   if (viz) {
     viz.setTrack(track ? track.title : '', track ? track.artist : '');
-    viz.setCoverColors(track && track.hasCover ? '/api/cover/' + track.id : null);
+    viz.setCoverColors(track && track.hasCover ? coverUrl(track.id) : null);
   }
 
   // Update player bar
@@ -2106,7 +2150,7 @@ function playCurrentTrack() {
 
   var cover = document.getElementById('playerCover');
   if (track && track.hasCover) {
-    cover.innerHTML = '<img src="/api/cover/' + trackId + '">';
+    cover.innerHTML = '<img src="' + coverUrl(trackId) + '">';
   } else {
     cover.innerHTML = '<div class="ph">' + PLACEHOLDER_SVG + '</div>';
   }
@@ -3290,7 +3334,7 @@ function updatePlayerFromDesktop(d) {
   if (d.trackId !== lastRemoteTrackId) {
     lastRemoteTrackId = d.trackId;
     var cover = document.getElementById('playerCover');
-    if (d.hasCover && d.trackId) cover.innerHTML = '<img src="/api/cover/' + d.trackId + '">';
+    if (d.hasCover && d.trackId) cover.innerHTML = '<img src="' + coverUrl(d.trackId) + '">';
     else cover.innerHTML = '<div class="ph">' + PLACEHOLDER_SVG + '</div>';
   }
   // Only update play/pause icon if state changed
@@ -3315,7 +3359,7 @@ function updatePlayerFromLocal() {
   document.getElementById('playerTitle').textContent = track ? track.title : 'Ghetto Blaster';
   document.getElementById('playerArtist').textContent = track ? track.artist : 'Select a track';
   var cover = document.getElementById('playerCover');
-  if (track && track.hasCover) cover.innerHTML = '<img src="/api/cover/' + trackId + '">';
+  if (track && track.hasCover) cover.innerHTML = '<img src="' + coverUrl(trackId) + '">';
   else cover.innerHTML = '<div class="ph">' + PLACEHOLDER_SVG + '</div>';
 }
 
@@ -3338,7 +3382,9 @@ function remoteAddToQueue(trackId) {
 // ─── WebSocket ───────────────────────────────────────────────────────────────
 (function connectWS() {
   if (!location.host) return;
-  var ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host);
+  var wsBase = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host;
+  var wsUrl = AUTH_TOKEN ? wsBase + '/?t=' + encodeURIComponent(AUTH_TOKEN) : wsBase;
+  var ws = new WebSocket(wsUrl);
   ws.onopen = function() {
     // Identify this device with a persistent name
     var deviceName = localStorage.getItem('ghettoblaster-device');

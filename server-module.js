@@ -45,6 +45,8 @@ function setDataDir(dir) {
   DATA_DIR = dir;
   // Reload config + playlists + history from the correct location
   config = loadConfig();
+  ensureAuthToken();
+  libraryIds = loadLibraryIds();
   playlists = loadPlaylists();
   history = loadHistory();
   favorites = loadFavorites();
@@ -53,6 +55,53 @@ function setDataDir(dir) {
   const coversDir = path.join(DATA_DIR, '__covers');
   if (!fs.existsSync(coversDir)) fs.mkdirSync(coversDir, { recursive: true });
   console.log('Data dir set to:', dir);
+}
+
+// ─── Auth Token (LAN access) ────────────────────────────────────────────────
+function ensureAuthToken() {
+  if (!config.authToken) {
+    config.authToken = crypto.randomBytes(16).toString('hex');
+    try {
+      fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
+      console.log('Generated new LAN auth token');
+    } catch (e) { console.warn('Could not persist auth token:', e.message); }
+  }
+  return config.authToken;
+}
+
+function getAuthToken() { return config.authToken; }
+
+// ─── Library IDs map (path → stable numeric id) ─────────────────────────────
+// Persisted so that ids survive across rescans/restarts. Without this, a track's
+// id is its index in scan order, which shifts whenever a file is added/removed —
+// breaking favorites, history, and manual playlists.
+function getLibraryIdsPath() { return path.join(DATA_DIR, 'library-ids.json'); }
+let libraryIds = { paths: {}, nextId: 0 };
+
+function loadLibraryIds() {
+  try {
+    const p = getLibraryIdsPath();
+    if (fs.existsSync(p)) {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (data && typeof data === 'object' && data.paths && typeof data.nextId === 'number') {
+        return data;
+      }
+    }
+  } catch (e) { console.warn('Could not load library-ids:', e.message); }
+  return { paths: {}, nextId: 0 };
+}
+
+function saveLibraryIds() {
+  try {
+    fs.writeFileSync(getLibraryIdsPath(), JSON.stringify(libraryIds, null, 2));
+  } catch (e) { console.warn('Could not save library-ids:', e.message); }
+}
+
+function getOrAssignTrackId(canonicalPath) {
+  if (libraryIds.paths[canonicalPath] != null) return libraryIds.paths[canonicalPath];
+  const id = libraryIds.nextId++;
+  libraryIds.paths[canonicalPath] = id;
+  return id;
 }
 
 // ─── Config (stored in userData so it survives updates) ─────────────────────
@@ -169,6 +218,9 @@ async function scanFolders() {
   library = [];
   genres = new Set();
 
+  // Track which paths are seen this scan (to prune deleted entries from the id map)
+  const seenPaths = new Set();
+
   // Clear cover cache before rescan
   try {
     const existing = fs.readdirSync(getCoversDir());
@@ -183,16 +235,23 @@ async function scanFolders() {
       console.warn(`Folder not found: ${resolved}`);
       continue;
     }
-    await scanDirectory(resolved, excludeFolders);
+    await scanDirectory(resolved, excludeFolders, seenPaths);
   }
 
+  // Prune deleted paths from the id map so it doesn't grow forever
+  for (const p of Object.keys(libraryIds.paths)) {
+    if (!seenPaths.has(p)) delete libraryIds.paths[p];
+  }
+  saveLibraryIds();
+
   scanning = false;
-  console.log(`Found ${library.length} tracks, ${genres.size} genres`);
-  broadcast({ type: 'scan:done', data: { count: library.length, genres: genres.size } });
+  const count = library.filter(Boolean).length;
+  console.log(`Found ${count} tracks, ${genres.size} genres`);
+  broadcast({ type: 'scan:done', data: { count, genres: genres.size } });
   return library;
 }
 
-async function scanDirectory(dir, excludeFolders) {
+async function scanDirectory(dir, excludeFolders, seenPaths) {
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -210,8 +269,10 @@ async function scanDirectory(dir, excludeFolders) {
 
     if (entry.isDirectory()) {
       if (excludeFolders.has(entry.name.toLowerCase())) continue;
-      await scanDirectory(fullPath, excludeFolders);
+      await scanDirectory(fullPath, excludeFolders, seenPaths);
     } else if (AUDIO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+      const trackId = getOrAssignTrackId(fullPath);
+      if (seenPaths) seenPaths.add(fullPath);
       try {
         const metadata = await parseFile(fullPath);
         const genre = metadata.common.genre ? metadata.common.genre[0] : null;
@@ -219,7 +280,6 @@ async function scanDirectory(dir, excludeFolders) {
 
         const picture = metadata.common.picture && metadata.common.picture[0];
         const hasCover = !!picture;
-        const trackId = library.length;
 
         if (hasCover) {
           let ext = '.jpg';
@@ -236,7 +296,7 @@ async function scanDirectory(dir, excludeFolders) {
           }
         }
 
-        library.push({
+        library[trackId] = {
           id: trackId,
           path: fullPath,
           filename: entry.name,
@@ -248,10 +308,10 @@ async function scanDirectory(dir, excludeFolders) {
           duration: metadata.format.duration || 0,
           genre: genre,
           hasCover,
-        });
+        };
       } catch (e) {
-        library.push({
-          id: library.length,
+        library[trackId] = {
+          id: trackId,
           path: fullPath,
           filename: entry.name,
           title: entry.name.replace(/\.[^/.]+$/, ''),
@@ -262,7 +322,7 @@ async function scanDirectory(dir, excludeFolders) {
           duration: 0,
           genre: null,
           hasCover: false,
-        });
+        };
       }
     }
   }
@@ -271,8 +331,20 @@ async function scanDirectory(dir, excludeFolders) {
 // ─── Security: validate track ID ─────────────────────────────────────────────
 function getTrackById(id) {
   const numId = parseInt(id);
-  if (isNaN(numId) || numId < 0 || numId >= library.length) return null;
-  return library[numId];
+  if (isNaN(numId) || numId < 0) return null;
+  return library[numId] || null;
+}
+
+// True iff `id` references an existing track in the (sparse) library.
+function isValidTrackId(id) {
+  return typeof id === 'number' && id >= 0 && library[id] != null;
+}
+
+// Count of actual tracks (library is sparse — library.length is misleading).
+function trackCount() {
+  let n = 0;
+  for (let i = 0; i < library.length; i++) if (library[i] != null) n++;
+  return n;
 }
 
 // ─── WebSocket ───────────────────────────────────────────────────────────────
@@ -349,11 +421,32 @@ function startServer(port) {
     app.use(express.json({ limit: '10mb' }));
     app.use(express.static(path.join(__dirname, 'public')));
 
+    // ─── Auth ────────────────────────────────────────────────────────────────
+    // The desktop app loads http://localhost:3000 (bypassed). LAN clients must
+    // present the token from the QR code, either as Authorization header or
+    // ?t=TOKEN query param (needed for <audio>/<img> URLs that can't set headers).
+    function isLocalRequest(req) {
+      const ip = (req.socket.remoteAddress || '').replace('::ffff:', '');
+      return ip === '127.0.0.1' || ip === '::1';
+    }
+
+    function authMiddleware(req, res, next) {
+      if (isLocalRequest(req)) return next();
+      const expected = getAuthToken();
+      const headerToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      const queryToken = req.query.t;
+      const token = headerToken || queryToken;
+      if (token && expected && token === expected) return next();
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    app.use('/api/', authMiddleware);
+
     // ─── API Routes ──────────────────────────────────────────────────────────
     app.get('/api/tracks', (req, res) => {
       const q = (req.query.q || '').toLowerCase().trim();
       const genre = (req.query.genre || '').trim().toLowerCase();
-      let results = library;
+      // library is sparse (gaps from deleted files) — filter compacts it.
+      let results = library.filter(Boolean);
       if (genre) {
         // Substring match: "Hip-Hop" matches "Hip-Hop", "Hip-Hop, R&B", etc.
         results = results.filter(t => t.genre && t.genre.toLowerCase().includes(genre));
@@ -447,7 +540,7 @@ function startServer(port) {
     app.post('/api/queue', (req, res) => {
       const { trackIds } = req.body;
       if (!Array.isArray(trackIds)) return res.status(400).json({ error: 'trackIds must be an array' });
-      queue = trackIds.filter(id => typeof id === 'number' && id >= 0 && id < library.length);
+      queue = trackIds.filter(isValidTrackId);
       currentIndex = 0;
       isPlaying = false;
       broadcast({ type: 'state', data: getState() });
@@ -457,7 +550,7 @@ function startServer(port) {
     app.post('/api/queue/add', (req, res) => {
       const { trackIds } = req.body;
       if (!Array.isArray(trackIds)) return res.status(400).json({ error: 'trackIds must be an array' });
-      const valid = trackIds.filter(id => typeof id === 'number' && id >= 0 && id < library.length);
+      const valid = trackIds.filter(isValidTrackId);
       queue.push(...valid);
       broadcast({ type: 'state', data: getState() });
       res.json({ ok: true, queueLength: queue.length });
@@ -512,8 +605,9 @@ function startServer(port) {
 
     app.post('/api/rescan', rescanLimiter, async (req, res) => {
       await scanFolders();
-      broadcast({ type: 'library-updated', data: { count: library.length } });
-      res.json({ ok: true, count: library.length });
+      const count = trackCount();
+      broadcast({ type: 'library-updated', data: { count } });
+      res.json({ ok: true, count });
     });
 
     // ─── History ─────────────────────────────────────────────────────────────
@@ -585,14 +679,19 @@ function startServer(port) {
       res.json({ ok: true });
     });
 
-    // QR code for mobile access
+    // QR code for mobile access — embeds the auth token so the phone is
+    // immediately authorized after scanning.
     app.get('/api/qrcode', async (req, res) => {
       const ip = getLanIp();
       const port = config.port || 3000;
-      const url = `http://${ip}:${port}`;
+      const token = getAuthToken();
+      const url = token
+        ? `http://${ip}:${port}/?t=${encodeURIComponent(token)}`
+        : `http://${ip}:${port}`;
       try {
         const svg = await QRCode.toString(url, { type: 'svg', margin: 1, width: 180 });
-        res.json({ url, svg });
+        // Return a display URL (without token) so settings UI doesn't leak it.
+        res.json({ url: `http://${ip}:${port}`, svg });
       } catch (e) {
         res.status(500).json({ error: 'QR generation failed' });
       }
@@ -618,7 +717,7 @@ function startServer(port) {
           .map(t => t.id);
       }
       // For manual playlists, filter out IDs that no longer exist in library
-      return (pl.trackIds || []).filter(id => id >= 0 && id < library.length);
+      return (pl.trackIds || []).filter(isValidTrackId);
     }
 
     app.get('/api/playlists/:id', (req, res) => {
@@ -640,7 +739,7 @@ function startServer(port) {
 
       let resolvedIds = [];
       if (Array.isArray(trackIds) && trackIds.length > 0) {
-        resolvedIds = trackIds.filter(id => typeof id === 'number' && id >= 0 && id < library.length);
+        resolvedIds = trackIds.filter(isValidTrackId);
       } else if (Array.isArray(genreFilter) && genreFilter.length > 0) {
         const lowerGenres = genreFilter.map(g => g.toLowerCase());
         resolvedIds = library
@@ -761,7 +860,7 @@ function startServer(port) {
         month: { plays: monthPlays.length, minutes: monthMinutes },
         topArtists,
         topGenres,
-        totalTracks: library.length,
+        totalTracks: trackCount(),
         favorites: favorites.size,
       });
     });
@@ -821,6 +920,21 @@ function startServer(port) {
       // WebSocket + connected users tracking
       wssInstance = new WebSocketServer({ server: serverInstance, maxPayload: 2048 });
       wssInstance.on('connection', (ws, req) => {
+        const ip = (req.socket.remoteAddress || '').replace('::ffff:', '');
+        const isLocal = ip === '127.0.0.1' || ip === '::1';
+        if (!isLocal) {
+          // Validate token from ?t= query param
+          let token = null;
+          try {
+            const u = new URL(req.url, 'http://localhost');
+            token = u.searchParams.get('t');
+          } catch(e) { /* ignore */ }
+          const expected = getAuthToken();
+          if (!token || !expected || token !== expected) {
+            ws.close(1008, 'Unauthorized');
+            return;
+          }
+        }
         if (clients.size >= 20) {
           ws.close(1013, 'Too many connections');
           return;
@@ -828,7 +942,6 @@ function startServer(port) {
         clients.add(ws);
         userCounter++;
         const userId = 'user-' + userCounter;
-        const ip = (req.socket.remoteAddress || '').replace('::ffff:', '');
         uniqueIps.add(ip);
         connectedUsers.set(ws, { id: userId, name: 'Device ' + userCounter, ip: ip, connectedAt: new Date().toISOString() });
 
@@ -878,7 +991,7 @@ function startServer(port) {
                 console.log('File added/removed, rescanning...');
                 lastScanTime = Date.now();
                 await scanFolders();
-                broadcast({ type: 'library-updated', data: { count: library.length } });
+                broadcast({ type: 'library-updated', data: { count: trackCount() } });
               }, 5000);
             });
           } catch (e) {
