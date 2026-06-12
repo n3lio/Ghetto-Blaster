@@ -458,8 +458,19 @@ class Visualizer {
   // ─── GLOW ─────────────────────────────────────────────────────────────────
   initParticles() {
     this.particles = [];
-    for (let i = 0; i < 50; i++) {
-      this.particles.push({ x: Math.random(), y: Math.random(), vx: (Math.random() - 0.5) * 0.003, vy: (Math.random() - 0.5) * 0.003, size: Math.random() * 3 + 2, offset: Math.random() * 360 });
+    // 25 fewer / bigger particles, slower base velocity, with a smoothed
+    // "size pulse" that the audio modulates instead of the previous flicker.
+    for (let i = 0; i < 25; i++) {
+      this.particles.push({
+        x: Math.random(),
+        y: Math.random(),
+        vx: (Math.random() - 0.5) * 0.0014,
+        vy: (Math.random() - 0.5) * 0.0014,
+        size: Math.random() * 4 + 4,         // 4..8 (was 2..5)
+        pulse: Math.random() * Math.PI * 2,  // continuous phase, no random per-frame jitter
+        colorPos: Math.random(),             // 0..1 position along the palette
+        sizeNow: 0,                          // smoothed size, eased toward target
+      });
     }
   }
 
@@ -468,25 +479,48 @@ class Visualizer {
     const colors = this.getColors();
     const bass = this.boost(this.getAvg(0, 6));
     const mid = this.boost(this.getAvg(6, 16));
-    ctx.fillStyle = 'rgba(10,10,11,' + (0.08 + (1 - bass) * 0.06) + ')';
+    // Slightly more aggressive trail clearing so older particles fade fast
+    // instead of layering up into noise.
+    ctx.fillStyle = 'rgba(10,10,11,' + (0.10 + (1 - bass) * 0.05) + ')';
     ctx.fillRect(0, 0, w, h);
+
     for (const p of this.particles) {
-      p.x += p.vx * (1 + bass * 6) + (Math.random() - 0.5) * 0.003 * (1 + bass * 5);
-      p.y += p.vy * (1 + bass * 6) + (Math.random() - 0.5) * 0.003 * (1 + bass * 5);
-      if (p.x < 0 || p.x > 1) p.vx *= -1; if (p.y < 0 || p.y > 1) p.vy *= -1;
-      p.x = Math.max(0, Math.min(1, p.x)); p.y = Math.max(0, Math.min(1, p.y));
-      const px = p.x * w, py = p.y * h, radius = p.size * (1 + bass * 7);
-      // Cycle through palette colors
-      const phase = (p.offset + mid * 120) % 3;
-      const c = phase < 1 ? colors.c1 : phase < 2 ? colors.c2 : colors.c3;
+      // Drift: gentle constant velocity, with bass nudge — no per-frame
+      // random kick. The previous Math.random() in every step caused the
+      // scintillation. Let the wave carry the motion instead.
+      p.x += p.vx * (1 + bass * 2.5);
+      p.y += p.vy * (1 + bass * 2.5);
+      if (p.x < 0 || p.x > 1) p.vx *= -1;
+      if (p.y < 0 || p.y > 1) p.vy *= -1;
+      p.x = Math.max(0, Math.min(1, p.x));
+      p.y = Math.max(0, Math.min(1, p.y));
+
+      // Smooth pulse: a slow sine breathing + bass kick, eased rather than
+      // jumped. p.sizeNow chases the target, so spikes feel organic.
+      p.pulse += 0.02 + bass * 0.04;
+      const breath = 0.85 + Math.sin(p.pulse) * 0.15;
+      const target = p.size * (breath + bass * 1.6);
+      p.sizeNow = p.sizeNow * 0.85 + target * 0.15;
+      const px = p.x * w, py = p.y * h, radius = p.sizeNow;
+
+      // Smooth color blend across the palette (no hard switches between
+      // c1/c2/c3 the way the previous phase index did). lerp on a 0..2
+      // axis: 0 → c1, 1 → c2, 2 → c3 then back.
+      const t = (p.colorPos + mid * 0.4 + this.frame * 0.0025) % 1;
+      const seg = t * 2; // 0..2
+      const c = seg < 1
+        ? this.lerpColor(colors.c1, colors.c2, seg)
+        : this.lerpColor(colors.c2, colors.c3, seg - 1);
+
       const g = ctx.createRadialGradient(px, py, 0, px, py, radius * 5);
-      g.addColorStop(0, this.rgba(c, 0.5 + bass * 0.5));
-      g.addColorStop(0.3, this.rgba(c, 0.15 + bass * 0.3));
+      g.addColorStop(0, this.rgba(c, 0.55 + bass * 0.4));
+      g.addColorStop(0.3, this.rgba(c, 0.18 + bass * 0.25));
       g.addColorStop(1, 'transparent');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, radius * 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(px, py, radius * 5, 0, Math.PI * 2); ctx.fill();
       // Bright core
-      ctx.fillStyle = this.rgba(c, 0.6 + bass * 0.4);
-      ctx.beginPath(); ctx.arc(px, py, radius * 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = this.rgba(c, 0.55 + bass * 0.35);
+      ctx.beginPath(); ctx.arc(px, py, radius * 0.45, 0, Math.PI * 2); ctx.fill();
     }
   }
 
@@ -531,6 +565,14 @@ class Visualizer {
     glow.addColorStop(0, this.rgba(colors.c1, bass * 0.2));
     glow.addColorStop(1, 'transparent');
     ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
+    // Color strategy:
+    //  - Cover mode: smooth lerp c1 → c2 → c1 around the ring, so the two
+    //    "punchy" cover colors blend continuously instead of hard-switching
+    //    at thirds. The user's request: "dégradé color1 a couleur 2".
+    //  - Theme mode: rotate hue around the wheel from accent → +180° and
+    //    back, with constant saturation/lightness — feels like a single
+    //    palette breathing rather than three discrete colors.
+    const useCoverGradient = colors.source === 'cover';
     for (let i = 0; i < bars; i++) {
       const value = this.boost(freqArray[i * step] / 255, 0.55);
       const angle = (i / bars) * Math.PI * 2 - Math.PI / 2;
@@ -538,8 +580,18 @@ class Visualizer {
       const innerR = radius * 0.35;
       const x1 = cx + Math.cos(angle) * innerR, y1 = cy + Math.sin(angle) * innerR;
       const x2 = cx + Math.cos(angle) * (innerR + barLen), y2 = cy + Math.sin(angle) * (innerR + barLen);
-      const t = i / bars;
-      const c = t < 0.33 ? colors.c1 : t < 0.66 ? colors.c2 : colors.c3;
+
+      let c;
+      if (useCoverGradient) {
+        // Mirror the gradient at the halfway mark so the ring looks
+        // symmetrical instead of jumping when wrapping at i=0/i=bars.
+        const half = i < bars / 2 ? (i / (bars / 2)) : ((bars - i) / (bars / 2));
+        c = this.lerpColor(colors.c1, colors.c2, half);
+      } else {
+        // Theme mode: smooth hue rotation around the accent.
+        const hueOffset = Math.sin((i / bars) * Math.PI * 2) * 60; // ±60°
+        c = this.hslToRgb(((colors.hue + hueOffset + 360) % 360) / 360, 0.75, 0.55);
+      }
       ctx.strokeStyle = this.rgba(c, 0.15 + value * 0.85);
       ctx.lineWidth = 2 + value * 2.5;
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
