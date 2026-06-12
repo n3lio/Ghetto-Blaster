@@ -1382,6 +1382,25 @@ if ('serviceWorker' in navigator && !window.resonance) {
   }
 })();
 
+// ─── Volume persistence across track changes (v3.15.5) ────────────────────
+// Some browsers (and electron's chromium) reset audio.volume to 1 when
+// audio.src changes. The legacy slider only writes the volume on user
+// input, so the next track played at full while the slider/icon kept
+// showing the user's intended value. Re-apply the saved volume on every
+// loadstart, but bow out of crossfade ramps (which deliberately mutate
+// audio.volume) to avoid fighting them.
+(function setupVolumePersist() {
+  var audioEl = document.querySelector('audio');
+  if (!audioEl) return;
+  audioEl.addEventListener('loadstart', function() {
+    if (window.crossfadeTriggered) return;
+    var cfg = window._appConfig || {};
+    if (typeof cfg.volume === 'number' && cfg.volume >= 0 && cfg.volume <= 1) {
+      audioEl.volume = cfg.volume;
+    }
+  });
+})();
+
 // ─── Speed / pitch control (Mixing tab, v3.15) ────────────────────────────
 // Sets `audio.playbackRate` directly. We disable preservesPitch so pitch
 // rises with speed — that's the vinyl/DJ behavior the user asked for, and
@@ -1622,8 +1641,9 @@ if ('serviceWorker' in navigator && !window.resonance) {
   var btn = document.createElement('button');
   btn.id = 'startRadioBtn';
   btn.className = 'np-radio-btn';
-  btn.title = 'Start a radio queue from this track';
-  btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="none"><path d="M3.24 6.15a2 2 0 00-.97 1.71v12.04a2 2 0 002 2h15.46a2 2 0 002-2V7.86a2 2 0 00-2-2H8.66l8.42-3.42a1 1 0 00-.74-1.86L3.83 5.85a2 2 0 00-.59.3zm14.39 13.5a3.5 3.5 0 11-1-6.85 3.5 3.5 0 011 6.85z"/></svg> Radio';
+  btn.title = 'Build a 50-track queue of similar songs (same artist / genre / era) and start playing';
+  btn.setAttribute('aria-label', 'Start a radio mix from this track');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="none" aria-hidden="true"><path d="M3.24 6.15a2 2 0 00-.97 1.71v12.04a2 2 0 002 2h15.46a2 2 0 002-2V7.86a2 2 0 00-2-2H8.66l8.42-3.42a1 1 0 00-.74-1.86L3.83 5.85a2 2 0 00-.59.3zm14.39 13.5a3.5 3.5 0 11-1-6.85 3.5 3.5 0 011 6.85z"/></svg> Start a radio mix';
   btn.style.display = 'none';
   meta.parentElement.appendChild(btn);
 

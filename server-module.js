@@ -32,32 +32,81 @@ let watcherInstance = null;
 // ─── Data directory (set by main.js before startServer, or fallback to __dirname)
 let DATA_DIR = __dirname;
 
-// Default smart playlists (created on first run)
+// Default smart playlists (created on first run). Sized so a typical user
+// has a sensible starter set without ending up with 30 default lists. Each
+// entry is `{ name, genreMatch, genreExclude? }`. The exclude list keeps
+// near-misses out (e.g. Hip-Hop US doesn't sweep up Rap Français).
 const DEFAULT_PLAYLISTS = [
-  { name: 'Hip-Hop', genreMatch: ['hip-hop','hiphop','rap','hip hop'] },
-  { name: 'Electro', genreMatch: ['electro','electronic','edm','house','techno','trance','dubstep'] },
-  { name: 'Reggae', genreMatch: ['reggae','ragga','dancehall','dub','ska'] },
-  { name: 'Rock', genreMatch: ['rock','punk','metal','grunge','hard rock'] },
-  { name: 'Alternative', genreMatch: ['alternative','indie','alt'] },
-  { name: 'Pop', genreMatch: ['pop','synth-pop','synthpop'] },
-  { name: 'Latino', genreMatch: ['latin','reggaeton','salsa','bachata','cumbia','latino'] },
+  // English-speaking hip-hop. Excludes 'french' / 'rap français' so the
+  // FR scene stays in its own list below.
+  { name: 'Hip-Hop',     genreMatch: ['hip-hop', 'hiphop', 'hip hop', 'rap'],
+                         genreExclude: ['rap français', 'rap francais', 'french rap', 'rap fr'] },
+  { name: 'Rap Français', genreMatch: ['rap français', 'rap francais', 'french rap', 'rap fr'] },
+  { name: 'Electro',      genreMatch: ['electro', 'electronic', 'edm', 'house', 'techno', 'trance', 'dubstep'] },
+  { name: 'Rock',         genreMatch: ['rock', 'punk', 'metal', 'grunge', 'hard rock'] },
+  { name: 'Alternative',  genreMatch: ['alternative', 'indie', 'alt'] },
+  { name: 'Pop',          genreMatch: ['pop', 'synth-pop', 'synthpop'] },
+  { name: 'Reggae',       genreMatch: ['reggae', 'ragga', 'dancehall', 'dub', 'ska'] },
+  { name: 'Latino',       genreMatch: ['latin', 'reggaeton', 'salsa', 'bachata', 'cumbia', 'latino'] },
+  { name: 'Jazz',         genreMatch: ['jazz', 'bebop', 'swing', 'bossa', 'fusion'] },
+  { name: 'Soul / Funk',  genreMatch: ['soul', 'funk', 'r&b', 'rnb', 'rhythm and blues', 'motown'] },
+  { name: 'Classical',    genreMatch: ['classical', 'classique', 'baroque', 'romantic', 'orchestral', 'opera', 'symphony', 'concerto', 'chamber'] },
 ];
 
 function createDefaultPlaylists() {
-  // Only create if no smart playlists exist yet
-  if (playlists.some(p => p.type === 'smart')) return;
-  for (const def of DEFAULT_PLAYLISTS) {
-    playlists.push({
-      id: crypto.randomUUID(),
-      name: def.name,
-      type: 'smart',
-      genreMatch: def.genreMatch,
-      trackIds: [], // Will be resolved at play time from current library
-      createdAt: new Date().toISOString(),
-    });
+  // First-run shortcut: no smart playlists yet → ship the whole default set.
+  if (!playlists.some(p => p.type === 'smart')) {
+    for (const def of DEFAULT_PLAYLISTS) {
+      playlists.push({
+        id: crypto.randomUUID(),
+        name: def.name,
+        type: 'smart',
+        genreMatch: def.genreMatch,
+        genreExclude: def.genreExclude || null,
+        trackIds: [],
+        createdAt: new Date().toISOString(),
+      });
+    }
+    savePlaylists();
+    if (typeof log !== 'undefined' && log) log.info('default playlists created', { count: DEFAULT_PLAYLISTS.length });
+    return;
   }
-  savePlaylists();
-  console.log('Created default smart playlists');
+
+  // Existing installs: backfill any newly-shipped default that isn't there
+  // by name. We DON'T re-create one the user explicitly deleted (that
+  // requires a separate hint to know they removed it on purpose), but we
+  // do top up Classical / Jazz / Rap Français / Soul-Funk for the v3.15.5
+  // bump. We also patch in `genreExclude` on a Hip-Hop entry that was
+  // shipped before the exclude field existed.
+  const existingByName = new Map();
+  for (const p of playlists) {
+    if (p.type === 'smart' && p.name) existingByName.set(p.name.toLowerCase(), p);
+  }
+  let added = 0, patched = 0;
+  for (const def of DEFAULT_PLAYLISTS) {
+    const found = existingByName.get(def.name.toLowerCase());
+    if (!found) {
+      playlists.push({
+        id: crypto.randomUUID(),
+        name: def.name,
+        type: 'smart',
+        genreMatch: def.genreMatch,
+        genreExclude: def.genreExclude || null,
+        trackIds: [],
+        createdAt: new Date().toISOString(),
+      });
+      added++;
+    } else if (def.genreExclude && !found.genreExclude) {
+      // Existing playlist, no exclude yet — adopt the shipped one so
+      // 'Hip-Hop' stops sweeping up 'Rap Français'.
+      found.genreExclude = def.genreExclude;
+      patched++;
+    }
+  }
+  if (added > 0 || patched > 0) {
+    savePlaylists();
+    if (typeof log !== 'undefined' && log) log.info('default playlists topped up', { added, patched });
+  }
 }
 
 function setDataDir(dir) {
@@ -1691,14 +1740,43 @@ function startServer(port) {
       return null;
     }
 
+    // Best-effort extraction of a friendly device label from a User-Agent.
+    // Matches the most common platforms — falls back to 'Browser' so we
+    // never show a raw UA string in the UI.
+    function describeUserAgent(ua) {
+      if (!ua || typeof ua !== 'string') return { kind: 'unknown', label: 'Browser' };
+      const u = ua.toLowerCase();
+      if (u.indexOf('electron') !== -1) return { kind: 'desktop', label: 'Desktop' };
+      if (u.indexOf('iphone') !== -1) return { kind: 'mobile', label: 'iPhone' };
+      if (u.indexOf('ipad') !== -1) return { kind: 'tablet', label: 'iPad' };
+      if (u.indexOf('android') !== -1) {
+        return u.indexOf('mobile') !== -1
+          ? { kind: 'mobile', label: 'Android phone' }
+          : { kind: 'tablet', label: 'Android tablet' };
+      }
+      if (u.indexOf('mac os') !== -1) return { kind: 'desktop', label: 'Mac' };
+      if (u.indexOf('windows') !== -1) return { kind: 'desktop', label: 'Windows' };
+      if (u.indexOf('linux') !== -1) return { kind: 'desktop', label: 'Linux' };
+      return { kind: 'unknown', label: 'Browser' };
+    }
+
     app.get('/api/users', (req, res) => {
       const users = [];
-      connectedUsers.forEach((u) => users.push({
-        id: u.id,
-        name: u.name,
-        connectedAt: u.connectedAt,
-        role: u.role || 'full',
-      }));
+      connectedUsers.forEach((u) => {
+        const desc = describeUserAgent(u.ua);
+        users.push({
+          id: u.id,
+          name: u.name,
+          ip: u.ip,
+          // The renderer running inside Electron loads from 127.0.0.1 — flag
+          // it so the host UI can hide its own session from the device list.
+          isLocal: u.ip === '127.0.0.1' || u.ip === '::1',
+          connectedAt: u.connectedAt,
+          role: u.role || 'full',
+          deviceKind: desc.kind,
+          deviceLabel: desc.label,
+        });
+      });
       res.json(users);
     });
 
@@ -1786,6 +1864,7 @@ function startServer(port) {
           id: userId,
           name: 'Device ' + userCounter,
           ip: ip,
+          ua: req.headers['user-agent'] || '',
           connectedAt: new Date().toISOString(),
           role: 'full', // every new device starts with full powers
         });

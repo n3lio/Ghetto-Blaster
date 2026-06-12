@@ -586,25 +586,57 @@ if (isDesktop) {
   });
 }
 
-function fetchUsers() {
+window.fetchUsers = function fetchUsers() {
   fetch('/api/users').then(function(r){ return r.json(); }).then(function(users) {
     var list = document.getElementById('usersList');
     if (!list) return;
-    // Filter out the first connection (desktop itself)
-    if (users.length > 1) users = users.slice(1);
-    else { users = []; }
-    if (!users.length) { list.innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);">No remote devices connected</p>'; return; }
+    // Hide the desktop renderer's own session (it shows up as 127.0.0.1)
+    // — the user already knows they're using the desktop, no need to list it.
+    var visible = users.filter(function(u) { return !u.isLocal; });
+    if (!visible.length) {
+      list.innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);">No remote devices connected. Scan the QR code in Settings to pair a phone.</p>';
+      return;
+    }
     var USER_COLORS = ['#e8a435','#b68adf','#7ac47a','#5ba8e8','#e06b9f','#4dd4ac','#c47a7a','#8b5cf6'];
-    list.innerHTML = users.map(function(u, i) {
+    var ICONS = {
+      mobile:  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><circle cx="12" cy="18" r="0.6" fill="currentColor"/></svg>',
+      tablet:  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="12" cy="17" r="0.7" fill="currentColor"/></svg>',
+      desktop: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M9 20h6M12 16v4"/></svg>',
+      unknown: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 116 0c0 2-3 3-3 3M12 17h.01"/></svg>',
+    };
+    function elapsed(iso) {
+      var ms = Date.now() - new Date(iso).getTime();
+      var s = Math.floor(ms / 1000);
+      if (s < 60) return s + 's';
+      var m = Math.floor(s / 60); var rs = s % 60;
+      if (m < 60) return m + 'm ' + rs + 's';
+      var h = Math.floor(m / 60); return h + 'h ' + (m % 60) + 'm';
+    }
+    list.innerHTML = visible.map(function(u, i) {
       var color = USER_COLORS[i % USER_COLORS.length];
-      var isLast = i === users.length - 1;
-      return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;' + (isLast ? '' : 'border-bottom:1px solid var(--border);') + '">' +
-        '<div style="width:36px;height:36px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:700;color:#0a0a0b;">' + u.name.charAt(0).toUpperCase() + '</div>' +
-        '<div><div style="font-size:0.85rem;font-weight:500;">' + u.name + '</div><div style="font-size:0.7rem;color:var(--text-dim);">Connected ' + new Date(u.connectedAt).toLocaleTimeString() + '</div></div>' +
+      var isLast = i === visible.length - 1;
+      var icon = ICONS[u.deviceKind] || ICONS.unknown;
+      var roleBadge = u.role === 'guest'
+        ? '<span style="display:inline-block;background:var(--purple-subtle);color:var(--purple);border:1px solid var(--purple);border-radius:4px;padding:1px 6px;font-size:0.62rem;font-weight:700;letter-spacing:0.05em;margin-left:6px;">GUEST</span>'
+        : '';
+      return '<div data-user-id="' + u.id + '" data-role="' + u.role + '" style="display:flex;align-items:center;gap:12px;padding:12px 0;' + (isLast ? '' : 'border-bottom:1px solid var(--border);') + '">' +
+        '<div style="width:36px;height:36px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:700;color:#0a0a0b;">' + (u.name||'?').charAt(0).toUpperCase() + '</div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:0.85rem;font-weight:500;display:flex;align-items:center;gap:6px;">' + esc(u.name||'') + roleBadge + '</div>' +
+          '<div style="font-size:0.7rem;color:var(--text-dim);display:flex;align-items:center;gap:6px;margin-top:2px;">' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;">' + icon + esc(u.deviceLabel||'Browser') + '</span>' +
+            '<span>·</span>' +
+            '<span title="LAN address">' + esc(u.ip||'?') + '</span>' +
+            '<span>·</span>' +
+            '<span title="Connected since ' + new Date(u.connectedAt).toLocaleTimeString() + '">connected ' + elapsed(u.connectedAt) + ' ago</span>' +
+          '</div>' +
+        '</div>' +
       '</div>';
     }).join('');
   }).catch(function(){});
-}
+};
+// Local alias for the legacy call sites.
+var fetchUsers = window.fetchUsers;
 
 // ─── Output Tab ──────────────────────────────────────────────────────────────
 function fetchOutputDevices() {

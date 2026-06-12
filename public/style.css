@@ -1066,14 +1066,24 @@ html[data-theme="auto"] .onboarding-card {
 #settingsExtras .backup-restore:hover { background: var(--accent-subtle); }
 
 /* ─── Radio button on Now Playing ───────────────────────────────────────── */
+/* The button is appended into .np-track-info, which itself has
+   pointer-events:none so the visualizer underneath stays interactive.
+   Re-enable pointer-events on the button so it receives clicks. */
 .np-radio-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: transparent; color: var(--accent); border: 1px solid var(--accent);
-  border-radius: var(--radius-sm); padding: 4px 10px; font-size: 0.78rem;
-  font-family: var(--font); cursor: pointer; margin-top: 8px;
-  transition: background 0.15s ease;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent); color: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.78rem; font-weight: 600;
+  font-family: var(--font); cursor: pointer; margin-top: 10px;
+  transition: background 0.15s ease, transform 0.1s ease, filter 0.15s ease;
+  pointer-events: auto;
+  align-self: flex-start;
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
-.np-radio-btn:hover { background: var(--accent-subtle); }
+.np-radio-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.np-radio-btn:active { transform: none; }
 
 /* ─── Guest badge ───────────────────────────────────────────────────────── */
 .guest-badge {
