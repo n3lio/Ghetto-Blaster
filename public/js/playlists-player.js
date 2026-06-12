@@ -6,23 +6,33 @@
 var PL_COLORS = ['#e8a435','#c47a7a','#b68adf','#7ac47a','#5ba8e8','#e06b9f','#4dd4ac','#e05555','#8b5cf6','#f59e0b'];
 
 function getPlaylistColor(pl, index) {
-  // Smart playlists: match genre color from GENRE_COLORS
+  // Match a playlist to its genre color by checking the playlist's first
+  // genreMatch keyword (or its name as a fallback) against GENRE_COLORS.
+  //
+  // Why we only check `keyword.includes(matchTerm)` and NOT the reverse:
+  // the previous `m.includes(kw)` shortcut hit a false positive — the
+  // 'french rap' bucket contains the term 'french hip-hop', which
+  // .includes('hip-hop') from the Hip-Hop playlist's first keyword. The
+  // Hip-Hop playlist therefore ended up wearing the Rap FR blue instead
+  // of the Hip-Hop purple. Strict directional match fixes that without
+  // breaking the legit case (a playlist whose genreMatch contains 'rap'
+  // still finds 'rap' in the GENRE_COLORS bucket terms).
   if (pl.genreMatch && pl.genreMatch.length) {
     var kw = pl.genreMatch[0].toLowerCase();
     for (var i = 0; i < GENRE_COLORS.length; i++) {
-      if (GENRE_COLORS[i].match.some(function(m){ return kw.includes(m) || m.includes(kw); })) {
+      if (GENRE_COLORS[i].match.some(function(m){ return kw.indexOf(m) !== -1; })) {
         return GENRE_COLORS[i].color;
       }
     }
   }
-  // Also try matching from playlist name
+  // Match from the playlist name as a second-best signal.
   var nl = (pl.name || '').toLowerCase();
   for (var j = 0; j < GENRE_COLORS.length; j++) {
-    if (GENRE_COLORS[j].match.some(function(m){ return nl.includes(m); })) {
+    if (GENRE_COLORS[j].match.some(function(m){ return nl.indexOf(m) !== -1; })) {
       return GENRE_COLORS[j].color;
     }
   }
-  // Fallback: hash-based color
+  // Fallback: deterministic hash-based color.
   var hash = 0;
   for (var k = 0; k < (pl.name||'').length; k++) hash = ((hash << 5) - hash) + pl.name.charCodeAt(k);
   return PL_COLORS[Math.abs(hash + index) % PL_COLORS.length];
@@ -521,12 +531,97 @@ document.getElementById('playAll').addEventListener('click', function() {
 // to [] long after fetchTracks() populated it, which silently broke every
 // library view (Tracks/Albums/Artists/Years/Genres) and every filter.
 
+// Search-bar query operators. Tokens of the form `key:value` (or
+// `key:"value with spaces"`) become structured filters on a specific
+// field; everything else is free text matched fuzzily across
+// title/artist/album/genre. Year supports a single year or a range:
+// `year:2015`, `year:2010..2015`. Quoted values keep their spaces:
+// `genre:"hip hop"`, `artist:"Daft Punk"`.
+//
+// Without this, clicking a tile in the Years/Genres views (which
+// stamps `year:2021` into the search box) returned an empty list
+// because the legacy fuzzy filter looked for the literal string
+// 'year:2021' inside the track haystack.
+function _gbParseSearch(query) {
+  var filters = { year: null, artists: [], albums: [], genres: [], titles: [] };
+  var freeWords = [];
+  if (!query) return { filters: filters, free: freeWords };
+  // Tokenize while honouring `key:"quoted value"` and standalone "quoted".
+  var tokens = [];
+  var i = 0;
+  while (i < query.length) {
+    while (i < query.length && /\s/.test(query[i])) i++;
+    if (i >= query.length) break;
+    var tok = '';
+    while (i < query.length && !/\s/.test(query[i])) {
+      var ch = query[i];
+      if (ch === '"') {
+        var end = query.indexOf('"', i + 1);
+        if (end === -1) { tok += query.substring(i); i = query.length; break; }
+        tok += query.substring(i, end + 1);
+        i = end + 1;
+        continue;
+      }
+      tok += ch;
+      i++;
+    }
+    if (tok) tokens.push(tok);
+  }
+  for (var t = 0; t < tokens.length; t++) {
+    var tk = tokens[t];
+    var colon = tk.indexOf(':');
+    if (colon === -1) { freeWords.push(tk.toLowerCase()); continue; }
+    var key = tk.slice(0, colon).toLowerCase();
+    var raw = tk.slice(colon + 1).replace(/^"|"$/g, '');
+    var val = raw.toLowerCase();
+    if (key === 'year') {
+      var m = /^(\d{4})\.\.(\d{4})$/.exec(val);
+      if (m) filters.year = { from: parseInt(m[1], 10), to: parseInt(m[2], 10) };
+      else if (/^\d{4}$/.test(val)) {
+        var y = parseInt(val, 10); filters.year = { from: y, to: y };
+      } else freeWords.push(tk.toLowerCase());
+    } else if (key === 'artist' && val) filters.artists.push(val);
+    else if (key === 'album' && val) filters.albums.push(val);
+    else if (key === 'genre' && val) filters.genres.push(val);
+    else if (key === 'title' && val) filters.titles.push(val);
+    else freeWords.push(tk.toLowerCase());
+  }
+  return { filters: filters, free: freeWords };
+}
+
 function fuzzyFilter(query) {
   if (!query) return allTracks;
-  var words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  var parsed = _gbParseSearch(query);
+  var f = parsed.filters;
   return allTracks.filter(function(t) {
-    var hay = (t.title + ' ' + t.artist + ' ' + t.album + ' ' + (t.genre || '')).toLowerCase();
-    return words.every(function(w) { return hay.includes(w); });
+    if (f.year) {
+      var ys = String(t.year || '').match(/^\d{4}/);
+      if (!ys) return false;
+      var yn = parseInt(ys[0], 10);
+      if (yn < f.year.from || yn > f.year.to) return false;
+    }
+    if (f.artists.length) {
+      var artists = [(t.artist || '').toLowerCase()].concat((t.artists || []).map(function(a){ return String(a).toLowerCase(); }));
+      var hit = f.artists.some(function(v) { return artists.some(function(a) { return a.indexOf(v) !== -1; }); });
+      if (!hit) return false;
+    }
+    if (f.albums.length) {
+      var alb = (t.album || '').toLowerCase();
+      if (!f.albums.some(function(v) { return alb.indexOf(v) !== -1; })) return false;
+    }
+    if (f.genres.length) {
+      var genres = [(t.genre || '').toLowerCase()].concat((t.genres || []).map(function(g){ return String(g).toLowerCase(); }));
+      if (!f.genres.some(function(v) { return genres.some(function(g) { return g.indexOf(v) !== -1; }); })) return false;
+    }
+    if (f.titles.length) {
+      var ti = (t.title || '').toLowerCase();
+      if (!f.titles.some(function(v) { return ti.indexOf(v) !== -1; })) return false;
+    }
+    if (parsed.free.length) {
+      var hay = ((t.title || '') + ' ' + (t.artist || '') + ' ' + (t.album || '') + ' ' + (t.genre || '')).toLowerCase();
+      if (!parsed.free.every(function(w) { return hay.indexOf(w) !== -1; })) return false;
+    }
+    return true;
   });
 }
 

@@ -1254,46 +1254,149 @@ if ('serviceWorker' in navigator && !window.resonance) {
     return s ? parseInt(s[0], 10) : null;
   }
 
+  // Parses 'color:#xxx;background:rgba(...);' returned by getGenreStyle()
+  // into { color, bg } so the renderer can use the values separately.
+  function parseGenreStyleString(styleStr) {
+    if (typeof styleStr !== 'string') return null;
+    var col = styleStr.match(/color:\s*([^;]+);/i);
+    var bg  = styleStr.match(/background:\s*([^;]+);/i);
+    return col ? { color: col[1].trim(), bg: bg ? bg[1].trim() : col[1].trim() } : null;
+  }
+
+  // ─── Years view: brushable timeline ────────────────────────────────────
+  // Replaces the per-year tile grid with a horizontal timeline:
+  // - each year is one vertical bar (height ∝ track count, log-scaled so
+  //   a year with 200 tracks doesn't squash the rest);
+  // - decade ticks under the bars for orientation;
+  // - hover tooltip on each bar (year + count);
+  // - single click filters that one year (year:YYYY);
+  // - click+drag selects a range and filters year:from..to.
+  //
+  // Plain DOM (no SVG) so it stays styleable from style.css and
+  // touch-friendly on mobile.
   function renderYears() {
     var src = libraryTracks();
     var byYear = {};
+    var totalTracks = 0;
     src.forEach(function(t) {
       var y = pickYear(t);
       if (!y) return;
       byYear[y] = (byYear[y] || 0) + 1;
+      totalTracks++;
     });
-    var years = Object.keys(byYear).map(Number).sort(function(a, b) { return b - a; });
+    var years = Object.keys(byYear).map(Number).sort(function(a, b) { return a - b; });
     if (years.length === 0) {
       yearList.innerHTML = '<div class="lib-empty">No year tags in your library yet.</div>';
       return;
     }
-    // Group by decade.
-    var decades = {};
-    years.forEach(function(y) {
-      var d = Math.floor(y / 10) * 10;
-      decades[d] = decades[d] || [];
-      decades[d].push(y);
+    var min = years[0], max = years[years.length - 1];
+    // Pad min/max to decade boundaries for cleaner ticks.
+    var paddedMin = Math.floor(min / 10) * 10;
+    var paddedMax = Math.ceil((max + 1) / 10) * 10;
+    var span = Math.max(1, paddedMax - paddedMin);
+    var maxCount = years.reduce(function(m, y) { return Math.max(m, byYear[y]); }, 0);
+
+    var bars = '';
+    for (var y = paddedMin; y < paddedMax; y++) {
+      var n = byYear[y] || 0;
+      // Log scale + min height for non-zero so single-track years still show.
+      var pct = n > 0 ? Math.max(6, Math.round(Math.log(1 + n) / Math.log(1 + maxCount) * 100)) : 0;
+      var leftPct = ((y - paddedMin) / span) * 100;
+      var widthPct = (1 / span) * 100;
+      bars += '<div class="yt-bar' + (n === 0 ? ' empty' : '') + '" '
+        + 'data-year="' + y + '" data-count="' + n + '" '
+        + 'style="left:' + leftPct.toFixed(3) + '%;width:' + widthPct.toFixed(3) + '%;height:' + pct + '%;" '
+        + 'title="' + y + ' — ' + n + ' track' + (n !== 1 ? 's' : '') + '"></div>';
+    }
+    var ticks = '';
+    for (var d = paddedMin; d <= paddedMax; d += 10) {
+      var lp = ((d - paddedMin) / span) * 100;
+      ticks += '<span class="yt-tick" style="left:' + lp.toFixed(3) + '%;">' + d + '</span>';
+    }
+
+    yearList.innerHTML = ''
+      + '<div class="yt-header">'
+      +   '<span><strong>' + years.length + '</strong> year' + (years.length !== 1 ? 's' : '') + '</span>'
+      +   '<span class="yt-sep">·</span>'
+      +   '<span><strong>' + totalTracks + '</strong> total tracks</span>'
+      +   '<span class="yt-sep">·</span>'
+      +   '<span class="yt-hint">Click a bar to filter that year — drag across bars to pick a range</span>'
+      + '</div>'
+      + '<div class="yt-canvas">'
+      +   '<div class="yt-bars">' + bars + '</div>'
+      +   '<div class="yt-selection" id="ytSelection"></div>'
+      +   '<div class="yt-axis">' + ticks + '</div>'
+      + '</div>'
+      + '<div class="yt-readout" id="ytReadout"></div>';
+
+    // Brush behaviour.
+    var canvas = yearList.querySelector('.yt-canvas');
+    var sel = yearList.querySelector('#ytSelection');
+    var readout = yearList.querySelector('#ytReadout');
+    var dragStart = null;
+    function yearAt(clientX) {
+      var rect = canvas.getBoundingClientRect();
+      var x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+      return paddedMin + Math.floor((x / rect.width) * span);
+    }
+    function showSelection(a, b) {
+      var lo = Math.min(a, b), hi = Math.max(a, b);
+      var leftPct = ((lo - paddedMin) / span) * 100;
+      var widthPct = ((hi + 1 - lo) / span) * 100;
+      sel.style.display = 'block';
+      sel.style.left = leftPct.toFixed(3) + '%';
+      sel.style.width = widthPct.toFixed(3) + '%';
+      var n = 0;
+      for (var k = lo; k <= hi; k++) n += (byYear[k] || 0);
+      readout.textContent = lo === hi
+        ? lo + ' — ' + n + ' track' + (n !== 1 ? 's' : '')
+        : lo + '–' + hi + ' — ' + n + ' track' + (n !== 1 ? 's' : '');
+    }
+    function clearSelection() {
+      sel.style.display = 'none';
+      readout.textContent = '';
+      dragStart = null;
+    }
+    canvas.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      dragStart = yearAt(e.clientX);
+      showSelection(dragStart, dragStart);
     });
-    var decadeKeys = Object.keys(decades).map(Number).sort(function(a, b) { return b - a; });
-    yearList.innerHTML = decadeKeys.map(function(d) {
-      var rows = decades[d].map(function(y) {
-        return '<button class="year-card" data-year="' + y + '" aria-label="Filter to year ' + y + '">'
-          + '<span class="year-card-y">' + y + '</span>'
-          + '<span class="year-card-n">' + byYear[y] + '</span>'
-          + '</button>';
-      }).join('');
-      return '<section class="decade">'
-        + '<h3>' + d + 's</h3>'
-        + '<div class="year-grid">' + rows + '</div>'
-        + '</section>';
-    }).join('');
+    canvas.addEventListener('mousemove', function(e) {
+      if (dragStart == null) return;
+      showSelection(dragStart, yearAt(e.clientX));
+    });
+    canvas.addEventListener('mouseleave', function() {
+      // Don't cancel — user may release outside the canvas.
+    });
+    document.addEventListener('mouseup', function(e) {
+      if (dragStart == null) return;
+      var endY = yearAt(e.clientX);
+      var lo = Math.min(dragStart, endY);
+      var hi = Math.max(dragStart, endY);
+      dragStart = null;
+      // Single-year click goes through year:YYYY, range goes through
+      // year:YYYY..YYYY. The fuzzy filter handles both.
+      var query = lo === hi ? 'year:' + lo : 'year:' + lo + '..' + hi;
+      jumpToTracksWithFilter(query);
+    });
   }
 
+  // ─── Genres view: clustered cards ──────────────────────────────────────
+  // Groups raw genre tags by GENRE_GROUPS (the same buckets the legacy
+  // genre dropdown uses). Each group is rendered with the genre's brand
+  // color from GENRE_COLORS, and individual genres inside the group get
+  // a hue variation around the group color so visually-related genres
+  // stay visually-related (lavender-ish for the Hip-Hop family, blues
+  // for Electro, etc.). Genres that don't fit a known bucket land in
+  // an 'Other' pile sorted by descending count.
   function renderGenres() {
     var src = libraryTracks();
     var byGenre = {};
+    var totalTracks = 0;
     src.forEach(function(t) {
       var arr = (t.genres && t.genres.length) ? t.genres : (t.genre ? [t.genre] : []);
+      if (arr.length) totalTracks++;
       arr.forEach(function(g) {
         if (!g) return;
         var key = String(g).trim();
@@ -1301,59 +1404,115 @@ if ('serviceWorker' in navigator && !window.resonance) {
         byGenre[key] = (byGenre[key] || 0) + 1;
       });
     });
-    var genres = Object.keys(byGenre).sort(function(a, b) {
-      return byGenre[b] - byGenre[a] || a.localeCompare(b);
-    });
+    var genres = Object.keys(byGenre);
     if (genres.length === 0) {
       genreList.innerHTML = '<div class="lib-empty">No genre tags in your library yet.</div>';
       return;
     }
-    genreList.innerHTML = '<div class="genre-grid">' + genres.map(function(g) {
-      var hue = 0;
-      // Try to use the genre color helper if it exists in the legacy code.
-      if (typeof window.getGenreStyle === 'function') {
-        try {
-          var s = window.getGenreStyle(g);
-          if (s && typeof s.bg === 'string') {
-            return '<button class="genre-card" data-genre="' + escHtml(g) + '" '
-              + 'style="background:' + s.bg + ';color:' + (s.color || '#fff') + ';" '
-              + 'aria-label="Filter to genre ' + escHtml(g) + '">'
-              + '<span class="genre-card-name">' + escHtml(g) + '</span>'
-              + '<span class="genre-card-n">' + byGenre[g] + '</span>'
-              + '</button>';
-          }
-        } catch (e) { /* ignore */ }
+
+    // Bucket each genre into a GENRE_GROUPS entry, or 'Other'.
+    var groups = Array.isArray(window.GENRE_GROUPS) ? window.GENRE_GROUPS : [];
+    var bucketed = {};
+    var orderedLabels = [];
+    function getOrCreate(label) {
+      if (!(label in bucketed)) {
+        bucketed[label] = [];
+        orderedLabels.push(label);
       }
-      // Fallback: deterministic hue per genre name.
-      for (var i = 0; i < g.length; i++) hue = (hue * 31 + g.charCodeAt(i)) % 360;
-      return '<button class="genre-card" data-genre="' + escHtml(g) + '" '
-        + 'style="background:linear-gradient(135deg, hsl(' + hue + ',45%,28%), hsl(' + ((hue + 35) % 360) + ',55%,18%));color:#fff;" '
-        + 'aria-label="Filter to genre ' + escHtml(g) + '">'
-        + '<span class="genre-card-name">' + escHtml(g) + '</span>'
-        + '<span class="genre-card-n">' + byGenre[g] + '</span>'
-        + '</button>';
-    }).join('') + '</div>';
+      return bucketed[label];
+    }
+    genres.forEach(function(g) {
+      var gl = g.toLowerCase();
+      var hit = null;
+      for (var i = 0; i < groups.length; i++) {
+        if (groups[i].match.some(function(m) { return gl.indexOf(m) !== -1; })) {
+          hit = groups[i].label;
+          break;
+        }
+      }
+      getOrCreate(hit || 'Other').push(g);
+    });
+
+    // Stable order: keep the group order from GENRE_GROUPS, push 'Other'
+    // last regardless. Inside a group, sort by descending track count.
+    var groupOrder = groups.map(function(g) { return g.label; }).concat(['Other']);
+    var ordered = groupOrder.filter(function(l) { return bucketed[l] && bucketed[l].length; });
+    orderedLabels.forEach(function(l) { if (ordered.indexOf(l) === -1) ordered.push(l); });
+
+    function genreHue(name) {
+      if (typeof window.getGenreStyle !== 'function') return null;
+      var parsed = parseGenreStyleString(window.getGenreStyle(name));
+      return parsed && parsed.color;
+    }
+
+    var html = '<div class="gx-header"><span><strong>'
+      + ordered.length + '</strong> group' + (ordered.length !== 1 ? 's' : '') + '</span>'
+      + '<span class="yt-sep">·</span>'
+      + '<span><strong>' + genres.length + '</strong> genre' + (genres.length !== 1 ? 's' : '') + '</span>'
+      + '<span class="yt-sep">·</span>'
+      + '<span><strong>' + totalTracks + '</strong> total tracks</span></div>';
+
+    ordered.forEach(function(label) {
+      var members = bucketed[label].slice().sort(function(a, b) {
+        return (byGenre[b] || 0) - (byGenre[a] || 0) || a.localeCompare(b);
+      });
+      var groupCount = members.reduce(function(s, g) { return s + (byGenre[g] || 0); }, 0);
+      // Pick the group color from the first member that has one.
+      var groupColor = null;
+      for (var k = 0; k < members.length; k++) {
+        groupColor = genreHue(members[k]);
+        if (groupColor) break;
+      }
+      if (!groupColor) groupColor = 'var(--accent)';
+
+      html += '<section class="gx-group">'
+        + '<header class="gx-group-head" style="--g-color:' + groupColor + ';">'
+        +   '<span class="gx-group-dot"></span>'
+        +   '<h3>' + escHtml(label) + '</h3>'
+        +   '<span class="gx-group-meta">' + members.length + ' genres · ' + groupCount + ' tracks</span>'
+        + '</header>'
+        + '<div class="gx-grid">'
+        + members.map(function(g) {
+            var col = genreHue(g) || groupColor;
+            return '<button class="gx-card" data-genre="' + escHtml(g) + '" '
+              + 'style="--g-color:' + col + ';" '
+              + 'aria-label="Filter to genre ' + escHtml(g) + '">'
+              +   '<span class="gx-card-name">' + escHtml(g) + '</span>'
+              +   '<span class="gx-card-n">' + byGenre[g] + '</span>'
+              + '</button>';
+          }).join('')
+        + '</div>'
+        + '</section>';
+    });
+    genreList.innerHTML = html;
   }
 
   function jumpToTracksWithFilter(query) {
     // Switch to Tracks view + drop the filter into the search box.
+    // We append rather than overwrite so a user who's already typed a
+    // free-text term doesn't lose it when they click a Year tile, and
+    // so multiple Year/Genre tiles compose. Each operator (year:, genre:)
+    // is replaced if already present, so clicking 2018 then 2021 ends up
+    // with `year:2021`, not `year:2018 year:2021`.
     var tracksBtn = document.querySelector('.lib-view-btn[data-view="tracks"]');
     if (tracksBtn) tracksBtn.click();
     var search = document.getElementById('search');
-    if (search) {
-      search.value = query;
-      search.dispatchEvent(new Event('input'));
-      search.dispatchEvent(new KeyboardEvent('keyup'));
+    if (!search) return;
+    var current = (search.value || '').trim();
+    var key = (query.split(':')[0] || '').toLowerCase(); // 'year' or 'genre'
+    if (key && current) {
+      // Strip any existing token of the same key (handles quoted values).
+      var stripped = current.replace(new RegExp('\\b' + key + ':(?:"[^"]*"|\\S+)\\s*', 'gi'), '').trim();
+      current = stripped;
     }
+    search.value = (current ? current + ' ' : '') + query;
+    search.dispatchEvent(new Event('input'));
   }
 
-  yearList.addEventListener('click', function(e) {
-    var card = e.target.closest && e.target.closest('.year-card');
-    if (!card) return;
-    jumpToTracksWithFilter('year:' + card.dataset.year);
-  });
+  // Old per-year .year-card grid is gone; the timeline handles its own
+  // mouse events above. We only need the .gx-card click here.
   genreList.addEventListener('click', function(e) {
-    var card = e.target.closest && e.target.closest('.genre-card');
+    var card = e.target.closest && e.target.closest('.gx-card, .genre-card');
     if (!card) return;
     jumpToTracksWithFilter('genre:"' + card.dataset.genre + '"');
   });

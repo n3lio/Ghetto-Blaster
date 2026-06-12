@@ -392,7 +392,10 @@ function renderAlbums() {
       default: return a.album.localeCompare(b.album);
     }
   });
-  document.getElementById('trackCount').textContent = albums.length + ' album' + (albums.length !== 1 ? 's' : '');
+  var albumTrackTotal = source.length;
+  document.getElementById('trackCount').textContent = albums.length
+    + ' album' + (albums.length !== 1 ? 's' : '')
+    + ' · ' + albumTrackTotal + ' track' + (albumTrackTotal !== 1 ? 's' : '');
   var ALBUM_PH = '<div class="group-icon" style="background:var(--surface);display:flex;align-items:center;justify-content:center;border-radius:6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:20px;height:20px;opacity:0.3;color:var(--accent);"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>';
   list.innerHTML = albums.map(function(a) {
     var artistLabel = a.artists.length > 2 ? a.artists[0] + ' + ' + (a.artists.length - 1) + ' more' : a.artists.join(', ');
@@ -486,7 +489,10 @@ function renderArtists() {
       default: return b.count - a.count;
     }
   });
-  document.getElementById('trackCount').textContent = artists.length + ' artist' + (artists.length !== 1 ? 's' : '');
+  var artistTrackTotal = source.length;
+  document.getElementById('trackCount').textContent = artists.length
+    + ' artist' + (artists.length !== 1 ? 's' : '')
+    + ' · ' + artistTrackTotal + ' track' + (artistTrackTotal !== 1 ? 's' : '');
   var ARTIST_COLORS = ['#e8a435','#b68adf','#7ac47a','#5ba8e8','#e06b9f','#4dd4ac','#c47a7a','#8b5cf6','#f59e0b','#e05555'];
   list.innerHTML = artists.map(function(a, i) {
     var color = ARTIST_COLORS[i % ARTIST_COLORS.length];

@@ -47,7 +47,7 @@ const DEFAULT_PLAYLISTS = [
   { name: 'Alternative',  genreMatch: ['alternative', 'indie', 'alt'] },
   { name: 'Pop',          genreMatch: ['pop', 'synth-pop', 'synthpop'] },
   { name: 'Reggae',       genreMatch: ['reggae', 'ragga', 'dancehall', 'dub', 'ska'] },
-  { name: 'Latino',       genreMatch: ['latin', 'reggaeton', 'salsa', 'bachata', 'cumbia', 'latino'] },
+  { name: 'Latin',        genreMatch: ['latin', 'reggaeton', 'salsa', 'bachata', 'cumbia', 'latino'] },
   { name: 'Jazz',         genreMatch: ['jazz', 'bebop', 'swing', 'bossa', 'fusion'] },
   { name: 'Soul / Funk',  genreMatch: ['soul', 'funk', 'r&b', 'rnb', 'rhythm and blues', 'motown'] },
   { name: 'Classical',    genreMatch: ['classical', 'classique', 'baroque', 'romantic', 'orchestral', 'opera', 'symphony', 'concerto', 'chamber'] },
