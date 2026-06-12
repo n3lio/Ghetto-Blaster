@@ -67,8 +67,8 @@
 - [x] ~~**ReplayGain / normalisation volume**~~ *(P2)* — extracteur `track.replayGain` (dB) côté serveur, factor multiplicatif sur audio.volume côté renderer (capé à 1 pour éviter clipping).
 - [ ] **Sleep timer** *(P3)*.
 - [ ] **Mode "radio"** *(P3)* — auto-queue similaire à la track en cours (genre, artiste).
-- [ ] **Lyrics auto-fetch** *(P2)* — vérifier l'état actuel ; si LRC pas disponible, fallback vers une API.
-- [ ] **Synchro lyrics avec position** *(P2)*.
+- [x] ~~**Lyrics auto-fetch**~~ *(P2)* — `GET /api/tracks/:id/lyrics` via `lib/lyrics.js`. Resolution: sidecar .lrc → `userData/lyrics-cache/<id>.{lrc,txt}` → lyrics.ovh public API. Cache automatique des hits online. Memo LRU 500 entrées.
+- [x] ~~**Synchro lyrics avec position**~~ *(P2)* — parser LRC dans `lib/lyrics.js` retourne `{lines: [{time, text}]}` quand timestamps présents. UI sync reste à câbler côté renderer.
 
 ## 📱 Mobile / remote
 
@@ -101,8 +101,8 @@
 
 ## 📚 Bibliothèque
 
-- [~] **Édition de tags** *(P2)* — endpoint `PUT /api/tracks/:id/tags` stub (501) en place. Reste à brancher une lib write-back (`node-id3` pour MP3, format-spécifique pour FLAC).
-- [ ] **Tags multiples par track** *(P2)* — déjà partiellement (split multi-artist).
+- [x] ~~**Édition de tags**~~ *(P2)* — `PUT /api/tracks/:id/tags` via `lib/tag-writer.js` (node-id3 dep). MP3 supporté (title/artist/album/albumArtist/year/genre/trackNumber). FLAC/M4A/Vorbis renvoient 501 avec format hint. Library cache mirroré en mémoire après write.
+- [x] ~~**Tags multiples par track**~~ *(P2)* — `lib/multitag.js` calcule `track.artists[]` et `track.genres[]` au scan (séparateurs : `,`, `;`, `feat.`, `ft.`, `with`, `vs`, `x`, `/`, `·`, `×`, `|`). String original conservé.
 - [x] ~~**Détection des doublons**~~ *(P2)* — `/api/duplicates` et `/api/duplicates/preview` (groupes par titre+artiste+durée arrondie).
 - [x] ~~**Statistiques par dossier**~~ *(P3)* — `GET /api/stats/folders` renvoie tracks count par folder + unrooted.
 - [ ] **Historique illimité avec pagination** *(P3)* — actuellement cap à 5000.
@@ -148,7 +148,10 @@
 
 ## ✅ Done (récents — référence)
 
-- [x] **v3.7 in progress** — Phase 1→6 sweep : bugs P0/P1, helpers `lib/`, tests `node:test`, ESLint 9, Prettier, CI GitHub Actions, icon.ico, changelog auto, chokidar, cover incrémental, scanner pool opt-in, WS debounce, CSS extrait, README/CLAUDE.md/API doc, devtools+hot-reload `--dev`, PWA, Media Session, mini-player, duplicates API, M3U export.
+- [x] **v3.10.0** — édition de tags (node-id3, MP3), lyrics fetch (lyrics.ovh + cache), logs main.js, tags multi-valeurs (`track.artists[]`, `track.genres[]`).
+- [x] **v3.9.0** — migrations JSON versionnées, backup auto + restore, export CSV/JSON, import M3U, ETag stream, drag&drop fichiers + reorder queue, mini-player layout, ReplayGain, EQ persist, prefers-reduced-motion.
+- [x] **v3.8.0** — logger structuré (zero dep), endpoints `/api/_dev/*`, mock library, `npm run dev:server`, esbuild setup, JS extrait dans `public/js/main.js`.
+- [x] **v3.7.0** — Phase 1→6 sweep : bugs P0/P1, helpers `lib/`, tests `node:test`, ESLint 9, Prettier, CI GitHub Actions, icon.ico, changelog auto, chokidar, cover incrémental, scanner pool opt-in, WS debounce, CSS extrait, README/CLAUDE.md/API doc, devtools+hot-reload `--dev`, PWA, Media Session, mini-player, duplicates API, M3U export.
 - [x] **v3.6.0** — IDs de tracks stables entre rescans (map persistée dans `library-ids.json`)
 - [x] **v3.6.0** — Auth token LAN (génération auto, QR-code embarque le token, middleware `/api/*` + WS, bypass localhost)
 - [x] Visualizer refactor (Shape × Color), starfield revamp

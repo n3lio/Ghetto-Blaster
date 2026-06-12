@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 const { startServer, stopServer, isRunning, getLanIp, getConfig, saveConfig, setDataDir } = require('./server-module');
+const { createLogger } = require('./lib/logger');
+let log = createLogger({ pretty: true, level: 'info', name: 'electron' });
 
 let mainWindow = null;
 let tray = null;
@@ -256,14 +258,21 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('error', (err) => {
-    console.error('Auto-updater error:', err.message);
+    log.error('autoUpdater error', { error: err.message });
     notifyRenderer('app:update-error', { message: err.message });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    log.info('update available', { version: info && info.version });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info('update downloaded', { version: info && info.version });
   });
 
   // Delay update check to ensure renderer is ready to receive events
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch((err) => {
-      console.log('Update check skipped:', err.message);
+      log.info('update check skipped', { error: err.message });
     });
   }, 5000);
 }
@@ -326,6 +335,17 @@ app.whenReady().then(async () => {
 
   // Set data dir to userData (persists across updates)
   setDataDir(app.getPath('userData'));
+  // Wire the Electron main process logger to userData/logs/electron.log,
+  // separate file from the server's so they can be tailed independently.
+  // We use createLogger (not setLogConfig) so we don't stomp the server's
+  // global logger.
+  log = createLogger({
+    dir: path.join(app.getPath('userData'), 'logs'),
+    level: isDev ? 'debug' : 'info',
+    pretty: isDev,
+    name: 'electron',
+  });
+  log.info('app starting', { version: app.getVersion(), platform: process.platform, dev: isDev });
 
   // Resolve port from config (fallback 3000)
   const cfg = getConfig() || {};
@@ -337,9 +357,9 @@ app.whenReady().then(async () => {
   try {
     const result = await startServer(desiredPort);
     serverPort = (result && result.port) || desiredPort;
-    console.log(`Server started on port ${serverPort}`);
+    log.info('server started from main', { port: serverPort });
   } catch (err) {
-    console.error('Failed to start server:', err.message);
+    log.error('server failed to start', { error: err.message });
     serverPort = desiredPort;
   }
 

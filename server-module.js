@@ -15,6 +15,9 @@ const { buildMockLibrary, buildMockGenres } = require('./lib/mock-library');
 const migrations = require('./lib/migrations');
 const backupLib = require('./lib/backup');
 const m3u = require('./lib/m3u');
+const tagWriter = require('./lib/tag-writer');
+const lyricsLib = require('./lib/lyrics');
+const multitag = require('./lib/multitag');
 let backupTimer = null;
 let log = getLogger();
 let scannerPool = null;
@@ -457,17 +460,25 @@ async function scanDirectory(dir, excludeFolders, seenPaths) {
           replayGain = rg.dB;
         }
 
+        const rawArtist = metadata.common.artist || 'Unknown';
+        const rawGenre = genre;
+
         library[trackId] = {
           id: trackId,
           path: fullPath,
           filename: entry.name,
           title: metadata.common.title || entry.name.replace(/\.[^/.]+$/, ''),
-          artist: metadata.common.artist || 'Unknown',
+          artist: rawArtist,
+          // Pre-computed multi-tag splits — surfaced separately so the UI
+          // can render artist chips / multi-genre filters without parsing
+          // each render.
+          artists: multitag.splitArtistTag(rawArtist),
           albumArtist: metadata.common.albumartist || '',
           album: metadata.common.album || '',
           year: metadata.common.year || null,
           duration: metadata.format.duration || 0,
-          genre: genre,
+          genre: rawGenre,
+          genres: multitag.splitGenreTag(rawGenre),
           hasCover,
           replayGain,
         };
@@ -1220,15 +1231,35 @@ function startServer(port) {
       res.send(lines.join('\n') + '\n');
     });
 
-    // ─── Tag editing (stub) ─────────────────────────────────────────────────
-    // Writing back ID3/Vorbis comments needs a write-capable tag library
-    // (e.g. node-id3 for MP3, others for FLAC). Not yet wired — endpoint is
-    // here so the UI can detect support and mark the field read-only meanwhile.
+    // ─── Tag editing ────────────────────────────────────────────────────────
+    // MP3-only first cut via node-id3. FLAC/M4A/Vorbis return 501 with a
+    // format hint so the UI can show a helpful message instead of a generic
+    // failure.
     app.put('/api/tracks/:id/tags', (req, res) => {
-      res.status(501).json({
-        error: 'Tag editing not yet implemented',
-        hint: 'requires a write-capable tag library; see Phase 6 in TODO.md',
-      });
+      const track = getTrackById(req.params.id);
+      if (!track) return res.status(404).json({ error: 'Track not found' });
+      if (!tagWriter.isAvailable()) {
+        return res.status(501).json({ error: 'tag editing dependency missing (node-id3)' });
+      }
+      const valid = tagWriter.pickValidFields(req.body || {});
+      if (Object.keys(valid).length === 0) {
+        return res.status(400).json({ error: 'no valid fields provided', accepted: [...tagWriter.SUPPORTED_FIELDS] });
+      }
+      const result = tagWriter.writeTags(track.path, valid);
+      if (!result.ok) {
+        // Format-not-supported → 501; other failures → 500.
+        const status = (result.format && result.format !== 'mp3') ? 501 : 500;
+        return res.status(status).json(result);
+      }
+      // Mirror the changes into our in-memory library so the UI sees them
+      // before the next rescan.
+      for (const k of Object.keys(valid)) {
+        if (k === 'year') track.year = parseInt(valid.year, 10) || track.year;
+        else track[k] = valid[k];
+      }
+      log.info('tags written', { trackId: track.id, fields: Object.keys(valid) });
+      broadcast({ type: 'library-updated', data: { count: trackCount() } });
+      res.json({ ok: true, written: valid });
     });
 
     // ─── Duplicate cleanup helper (preview only — never deletes files) ─────
@@ -1428,6 +1459,32 @@ function startServer(port) {
         unresolved: unresolved.slice(0, 50),
         unresolvedTotal: unresolved.length,
       });
+    });
+
+    // ─── Lyrics ────────────────────────────────────────────────────────────
+    // Resolves in this order: <track>.lrc next to the audio file → cached
+    // copy in userData/lyrics-cache/ → lyrics.ovh public API. Online hits
+    // are written to the cache so subsequent calls are instant + offline.
+    app.get('/api/tracks/:id/lyrics', async (req, res) => {
+      const track = getTrackById(req.params.id);
+      if (!track) return res.status(404).json({ error: 'Track not found' });
+      try {
+        const result = await lyricsLib.resolveLyrics(track, DATA_DIR, {
+          forceFetch: req.query.refresh === '1',
+          log,
+        });
+        if (!result) return res.status(404).json({ error: 'Lyrics not found' });
+        res.json({
+          trackId: track.id,
+          source: result.source,
+          synced: result.parsed.lines.length > 0,
+          lines: result.parsed.lines,
+          text: result.text,
+        });
+      } catch (e) {
+        log.warn('lyrics resolve failed', { trackId: track.id, error: e.message });
+        res.status(500).json({ error: 'lyrics fetch failed' });
+      }
     });
 
     // ─── Backups ───────────────────────────────────────────────────────────
