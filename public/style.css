@@ -854,3 +854,129 @@ body.mini .player-bar {
 body.mini .player-bar .progress-container {
   flex-basis: 100%;
 }
+
+/* ─── Onboarding overlay (first run with empty musicFolders) ─────────────── */
+.onboarding-overlay {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, #1a1815 0%, #0a0a0b 80%);
+  z-index: 9999;
+  animation: onb-fade 0.4s ease;
+}
+@keyframes onb-fade { from { opacity: 0; } to { opacity: 1; } }
+.onboarding-card {
+  width: min(560px, 92vw);
+  background: rgba(22, 21, 20, 0.96);
+  border-radius: 16px;
+  padding: 36px 40px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.06);
+  text-align: center;
+}
+.onboarding-logo {
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 28px;
+  color: var(--text-dim, #9a948a);
+}
+.onboarding-logo b {
+  font-weight: 800;
+  color: var(--text, #f0ebe4);
+}
+.onboarding-card h2 {
+  font-size: 2rem;
+  margin: 0 0 12px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.onboarding-card p {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text-dim, #9a948a);
+  margin: 0 0 24px;
+}
+.onboarding-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.onboarding-primary,
+.onboarding-secondary {
+  font: inherit;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.2s ease;
+}
+.onboarding-primary {
+  background: var(--accent, #e8a435);
+  color: #0a0a0b;
+}
+.onboarding-primary:hover { transform: translateY(-1px); filter: brightness(1.05); }
+.onboarding-secondary {
+  background: rgba(255,255,255,0.06);
+  color: var(--text, #f0ebe4);
+}
+.onboarding-secondary:hover { background: rgba(255,255,255,0.1); }
+.onboarding-hint {
+  font-size: 0.78rem !important;
+  margin-top: 16px !important;
+  opacity: 0.6;
+}
+
+/* ─── Light theme variables ───────────────────────────────────────────────
+   Activated by `data-theme="light"` on <html>, or by the OS pref when
+   `data-theme="auto"` is set. The accent stays the same (driven by --hue),
+   only the neutral palette flips.
+*/
+html[data-theme="light"] {
+  --bg: #fafaf7;
+  --bg-warm: #f5f2ed;
+  --surface: #ffffff;
+  --surface-hover: #f0ece5;
+  --surface-active: #e8e3da;
+  --border: #d8d4cd;
+  --border-light: #c8c4be;
+  --text: #1a1714;
+  --text-muted: #5a534d;
+  --text-dim: #8a8480;
+  --accent-glow: hsla(var(--hue), 70%, 50%, 0.18);
+  --accent-subtle: hsla(var(--hue), 70%, 50%, 0.10);
+  --purple-subtle: rgba(140, 100, 200, 0.12);
+}
+
+@media (prefers-color-scheme: light) {
+  html[data-theme="auto"] {
+    --bg: #fafaf7;
+    --bg-warm: #f5f2ed;
+    --surface: #ffffff;
+    --surface-hover: #f0ece5;
+    --surface-active: #e8e3da;
+    --border: #d8d4cd;
+    --border-light: #c8c4be;
+    --text: #1a1714;
+    --text-muted: #5a534d;
+    --text-dim: #8a8480;
+    --accent-glow: hsla(var(--hue), 70%, 50%, 0.18);
+    --accent-subtle: hsla(var(--hue), 70%, 50%, 0.10);
+    --purple-subtle: rgba(140, 100, 200, 0.12);
+  }
+}
+
+/* Onboarding card and modals override their own backgrounds with hardcoded
+   hex — patch them so light mode doesn't end up with light text on a light
+   surface. */
+html[data-theme="light"] .onboarding-overlay,
+html[data-theme="auto"] .onboarding-overlay {
+  background: radial-gradient(ellipse at center, var(--bg-warm) 0%, var(--bg) 80%);
+}
+html[data-theme="light"] .onboarding-card,
+html[data-theme="auto"] .onboarding-card {
+  background: var(--surface);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+  border: 1px solid var(--border);
+}

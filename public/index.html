@@ -14,6 +14,22 @@
 </head>
 <body>
 
+<!-- Onboarding overlay — revealed by main.js when musicFolders is empty -->
+<div class="onboarding-overlay" id="onboardingOverlay" style="display:none;">
+  <div class="onboarding-card">
+    <div class="onboarding-logo">
+      <span>Ghetto <b>Blaster</b></span>
+    </div>
+    <h2>Welcome</h2>
+    <p>To get started, point Ghetto Blaster at a folder containing your music. We'll scan it once and you're ready to play.</p>
+    <div class="onboarding-actions">
+      <button class="onboarding-primary" id="onboardingPickFolder">Choose music folder</button>
+      <button class="onboarding-secondary" id="onboardingMock">Continue with sample tracks</button>
+    </div>
+    <p class="onboarding-hint">Supported: MP3, M4A, FLAC, OGG, WAV, AAC. You can add more folders later in Settings.</p>
+  </div>
+</div>
+
 <header>
   <h1>Ghetto <b>Blaster</b></h1>
   <span class="scan-indicator" id="scanIndicator" style="display:none;font-size:0.72rem;color:var(--accent);animation:pulse 1.2s infinite;">Scanning...</span>
@@ -431,6 +447,12 @@
 <audio id="audio" preload="auto"></audio>
 
 <script src="visualizer.js"></script>
-<script src="/js/main.js"></script>
+<!-- Renderer modules — must load in this exact order: base defines globals
+     consumed by every later script. -->
+<script src="/js/base.js"></script>
+<script src="/js/tracks-queue.js"></script>
+<script src="/js/playlists-player.js"></script>
+<script src="/js/viz-settings.js"></script>
+<script src="/js/runtime.js"></script>
 </body>
 </html>

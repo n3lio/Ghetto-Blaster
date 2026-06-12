@@ -86,9 +86,9 @@
 - [ ] **Vue "Genres" rich** *(P3)* — pas juste un filtre, une vraie page d'exploration.
 - [x] ~~**Recherche : opérateurs**~~ *(P3)* — `lib/query.js` parse `artist:`, `album:`, `genre:`, `title:`, `year:YYYY` ou `year:YYYY..YYYY`, quoted values, multi-valeurs OR. 12 tests. Wired sur `/api/tracks?q=...`.
 - [x] ~~**Mode mini-player**~~ *(P2)* — fenêtre Electron + `body.mini` CSS layout compact (cover 56px + info + transport + progress full-width). Toggle via tray menu ou IPC `miniplayer:toggle`.
-- [ ] **Onboarding première utilisation** *(P2)* — petit tour guidé après install.
+- [x] ~~**Onboarding première utilisation**~~ *(P2)* — overlay `#onboardingOverlay` révélé au boot si `musicFolders` vide ET library vide. Boutons "Choose music folder" (call `window.resonance.pickFolder` + setConfig + rescan) et "Continue with sample tracks" (seed mock library en dev mode).
 - [x] ~~**Drag & drop reorder de la queue**~~ *(P2)* — handlers dragstart/dragover/drop sur `.track-item`, MutationObserver pour rearmer après render, push `/api/queue` après reorder. Mobile reste sur le menu long-press existant.
-- [ ] **Theme : dark/light/auto** *(P3)* — actuellement dark only ; ajouter light theme.
+- [x] ~~**Theme : dark/light/auto**~~ *(P3)* — `html[data-theme="auto|light|dark"]` + `prefers-color-scheme` media query. Variables CSS overridées dans `style.css`. `window.setTheme(mode)` persiste dans `_appConfig.theme`. Re-applique au changement OS quand auto.
 - [x] ~~**Animations réduites (prefers-reduced-motion)**~~ *(P2)* — `@media (prefers-reduced-motion: reduce)` désactive transforms/spins/pulses, garde transitions opacity courtes.
 - [ ] **A11y : navigation clavier complète + ARIA** *(P2)*.
 
@@ -120,10 +120,10 @@
 
 ## ⚡ Performance
 
-- [x] ~~**Découper `index.html`**~~ *(P1)* — CSS extrait dans `style.css`, JS inline (~2470 lignes) extrait dans `public/js/main.js`. `index.html` à 436 lignes.
-- [x] ~~**Bundler frontend (esbuild/vite)**~~ *(P2)* — esbuild setup en `scripts/build-frontend.js` (`npm run build:frontend`/`watch:frontend`). Pas wired dans le build prod par défaut, dispo pour quand on splitte main.js en sous-modules.
+- [x] ~~**Découper `index.html`**~~ *(P1)* — CSS extrait dans `style.css`, JS inline (~2470 lignes) extrait dans `public/js/main.js`. `index.html` à 436 lignes. v3.13 : main.js splitté en 5 modules (base, tracks-queue, playlists-player, viz-settings, runtime).
+- [x] ~~**Bundler frontend (esbuild/vite)**~~ *(P2)* — esbuild setup en `scripts/build-frontend.js` (`npm run build:frontend`/`watch:frontend`). Maintenant que main.js est splitté, on peut le wirer dans le build prod (à confirmer après testing).
 - [x] ~~**Scan en worker thread**~~ *(P2)* — pool `lib/scanner-pool.js`, opt-in via `config.scanInWorker`.
-- [~] **Lazy-load library côté UI** *(P2)* — pagination serveur prête (`?offset&limit` + `X-Total-Count` + `/api/tracks/count`). Frontend reste à brancher pour switch eager→lazy au-delà d'un seuil.
+- [~] **Lazy-load library côté UI** *(P2)* — server prêt + helper `window.gbLazy.loadAll({chunk, onProgress})` dispo côté frontend + warning console au boot si library > 5000. Wiring effectif dans le rendu de la library reste à faire (besoin de virtual scrolling).
 - [x] ~~**WebSocket : debounce broadcasts d'état**~~ *(P2)* — fenêtre 80ms, collapse les bursts state/desktop:state/users:changed.
 - [x] ~~**Cache HTTP côté covers/streams**~~ *(P2)* — ETag `W/"<size>-<mtime>"` + `Cache-Control: private, max-age=3600` sur `/api/stream`, support 304 sur `If-None-Match`.
 
@@ -148,6 +148,7 @@
 
 ## ✅ Done (récents — référence)
 
+- [x] **v3.13.0** — onboarding overlay, theme dark/light/auto, lazy-load helper `window.gbLazy`, frontend JS splitté en 5 modules.
 - [x] **v3.12.0** — query operators (`artist:`, `genre:`, `year:Y..Y`), history pagination, `npm run scan` headless.
 - [x] **v3.11.0** — radio mode (scoring artist/genre/year), sleep timer (server-side), mac/linux build config, CONTRIBUTING.md.
 - [x] **v3.10.0** — édition de tags (node-id3, MP3), lyrics fetch (lyrics.ovh + cache), logs main.js, tags multi-valeurs (`track.artists[]`, `track.genres[]`).
