@@ -342,6 +342,8 @@ document.querySelectorAll('.lib-view-btn').forEach(function(btn) {
     document.getElementById('trackList').style.display = currentLibView === 'tracks' ? '' : 'none';
     document.getElementById('albumList').style.display = currentLibView === 'albums' ? '' : 'none';
     document.getElementById('artistList').style.display = currentLibView === 'artists' ? '' : 'none';
+    document.getElementById('yearList').style.display = currentLibView === 'years' ? '' : 'none';
+    document.getElementById('genreList').style.display = currentLibView === 'genresrich' ? '' : 'none';
     tracks = allTracks.slice();
     // Hide duration sort options for Albums/Artists views (makes no sense)
     updateSortOptions();

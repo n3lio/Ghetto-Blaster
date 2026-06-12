@@ -83,7 +83,7 @@
   <div class="tab" data-tab="library">Library</div>
   <div class="tab" data-tab="playlists">Playlists</div>
   <div class="tab desktop-only-tab" data-tab="devices" id="devicesTab" style="display:none;">Devices</div>
-  <div class="tab desktop-only-tab" data-tab="eq">EQ</div>
+  <div class="tab desktop-only-tab" data-tab="eq">Mixing</div>
   <div class="tab" data-tab="stats" id="statsTab" style="display:none;">Stats</div>
 </div>
 
@@ -119,6 +119,12 @@
             <div class="viz-menu-label">Colors</div>
             <div class="viz-menu-item active" data-color="theme">Theme (auto)</div>
             <div class="viz-menu-item" data-color="cover">Cover</div>
+            <div class="viz-menu-item" data-color="palette:retro">Retro</div>
+            <div class="viz-menu-item" data-color="palette:neon">Neon</div>
+            <div class="viz-menu-item" data-color="palette:pastel">Pastel</div>
+            <div class="viz-menu-item" data-color="palette:fire">Fire</div>
+            <div class="viz-menu-item" data-color="palette:ocean">Ocean</div>
+            <div class="viz-menu-item" data-color="palette:forest">Forest</div>
             <div class="viz-menu-item close-item" id="vizCloseItem">Disable visualization</div>
           </div>
         </div>
@@ -158,6 +164,8 @@
         <button class="toolbar-btn lib-view-btn active" data-view="tracks">Tracks</button>
         <button class="toolbar-btn lib-view-btn" data-view="albums">Albums</button>
         <button class="toolbar-btn lib-view-btn" data-view="artists">Artists</button>
+        <button class="toolbar-btn lib-view-btn" data-view="years">Years</button>
+        <button class="toolbar-btn lib-view-btn" data-view="genresrich">Genres</button>
       </div>
       <select class="genre-select" id="sortSelect" style="max-width:120px;">
         <option value="title">Title A-Z</option>
@@ -181,6 +189,8 @@
     <div class="track-list" id="trackList"></div>
     <div class="track-list" id="albumList" style="display:none;"></div>
     <div class="track-list" id="artistList" style="display:none;"></div>
+    <div class="track-list lib-grid" id="yearList" style="display:none;"></div>
+    <div class="track-list lib-grid" id="genreList" style="display:none;"></div>
   </div>
 
   <!-- Playlists Tab -->
@@ -205,22 +215,31 @@
   <div class="panel" id="panel-eq">
     <div style="padding:20px;display:flex;flex-direction:column;height:100%;box-sizing:border-box;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;min-height:32px;flex-shrink:0;">
-        <h2 style="font-size:0.9rem;font-weight:600;color:var(--text-muted);">Equalizer</h2>
+        <h2 style="font-size:0.9rem;font-weight:600;color:var(--text-muted);">Mixing</h2>
       </div>
       <div style="position:relative;flex:1;min-height:120px;display:flex;">
         <canvas id="eqWaveCanvas" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.15;pointer-events:none;z-index:0;"></canvas>
         <div id="eqSliders" style="display:flex;align-items:flex-end;justify-content:space-between;flex:1;gap:6px;padding:0 10px;position:relative;z-index:1;"></div>
       </div>
       <div id="eqLabels" style="display:flex;justify-content:space-between;padding:6px 10px 0;font-size:0.62rem;color:var(--text-dim);flex-shrink:0;"></div>
-      <div style="margin-top:16px;text-align:center;flex-shrink:0;">
-        <select id="eqPreset" class="genre-select" style="max-width:160px;">
-          <option value="flat">Flat</option>
-          <option value="bass">Bass Boost</option>
-          <option value="treble">Treble Boost</option>
-          <option value="vocal">Vocal</option>
-          <option value="party">Party</option>
-          <option value="late-night">Late Night</option>
-        </select>
+      <div style="margin-top:16px;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:18px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Preset</span>
+          <select id="eqPreset" class="genre-select" style="max-width:160px;">
+            <option value="flat">Flat</option>
+            <option value="bass">Bass Boost</option>
+            <option value="treble">Treble Boost</option>
+            <option value="vocal">Vocal</option>
+            <option value="party">Party</option>
+            <option value="late-night">Late Night</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;min-width:240px;">
+          <span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Speed</span>
+          <input type="range" id="speedSlider" min="0.5" max="1.5" step="0.01" value="1" style="width:160px;">
+          <span id="speedValue" style="font-size:0.78rem;color:var(--text);width:48px;text-align:right;font-variant-numeric:tabular-nums;">1.00×</span>
+          <button id="speedReset" class="toolbar-btn" style="padding:3px 9px;font-size:0.7rem;">Reset</button>
+        </div>
       </div>
     </div>
   </div>
@@ -367,6 +386,11 @@
         <label>Duration: <span id="crossfadeVal">3</span>s</label>
         <input type="range" id="settingsCrossfadeDur" min="1" max="8" value="3" style="width:100%;margin-top:4px;">
       </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px;">
+        <input type="checkbox" id="settingsGapless" style="width:16px;height:16px;accent-color:var(--accent);">
+        <span>Gapless playback (preload next track)</span>
+      </label>
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0 24px;">Best for live albums, DJ sets — no silence between tracks. Disabled while crossfade is on.</p>
     </div>
 
     <div class="settings-section">

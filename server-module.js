@@ -738,9 +738,38 @@ function startServer(port) {
       res.json(getState());
     });
 
+    // Inline placeholder SVG — used when a track has no cover art. Picks a
+    // hue derived from the track id so different placeholders look distinct
+    // on a grid view. Returned with a long Cache-Control because it's
+    // synthesized from a deterministic id.
+    function placeholderSvg(id) {
+      const hue = ((parseInt(id, 10) || 0) * 47) % 360;
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">`
+        + `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">`
+        + `<stop offset="0" stop-color="hsl(${hue},35%,22%)"/>`
+        + `<stop offset="1" stop-color="hsl(${(hue + 40) % 360},45%,12%)"/>`
+        + `</linearGradient></defs>`
+        + `<rect width="200" height="200" fill="url(#g)"/>`
+        + `<g fill="none" stroke="hsl(${hue},55%,72%)" stroke-width="3" stroke-linecap="round" opacity="0.7">`
+        + `<path d="M76 64v54"/><path d="M132 50v54"/>`
+        + `<circle cx="68" cy="120" r="9" fill="hsl(${hue},55%,72%)" stroke="none"/>`
+        + `<circle cx="124" cy="106" r="9" fill="hsl(${hue},55%,72%)" stroke="none"/>`
+        + `<path d="M76 64l56-12"/></g></svg>`;
+    }
+
     app.get('/api/cover/:id', (req, res) => {
       const track = getTrackById(req.params.id);
-      if (!track || !track.hasCover) return res.status(404).json({ error: 'No cover art' });
+      if (!track || !track.hasCover) {
+        // v3.15: respond with a deterministic placeholder SVG instead of
+        // 404, so every <img src="/api/cover/:id"> in the UI gets something
+        // to render. The track still flagged hasCover=false elsewhere if
+        // any code wants to special-case "no real cover".
+        res.set({
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'public, max-age=2592000', // 30 days, safe — id-derived
+        });
+        return res.send(placeholderSvg(req.params.id));
+      }
       const extensions = ['.jpg', '.png', '.webp', '.gif'];
       for (const ext of extensions) {
         const coverPath = path.join(getCoversDir(), `${track.id}${ext}`);
@@ -753,7 +782,10 @@ function startServer(port) {
           return res.sendFile(coverPath);
         }
       }
-      res.status(404).json({ error: 'No cover art' });
+      // Cover file missing on disk despite hasCover=true → still render a
+      // placeholder so the UI doesn't break.
+      res.set('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.send(placeholderSvg(req.params.id));
     });
 
     const MIME_TYPES = {
@@ -1771,6 +1803,32 @@ function startServer(port) {
         let lastScanTime = Date.now();
         const excl = new Set((config.excludeFolders || []).map(f => f.toLowerCase()));
 
+        // Burst protection: if a flood of events comes in (user dropped a
+        // huge folder, mass move, etc.), stop scheduling rescans for an
+        // extended window so we don't thrash the disk and the renderer.
+        const BURST_WINDOW_MS = 5000;
+        const BURST_MAX_EVENTS = 5000;
+        const BURST_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+        let burstCount = 0;
+        let burstWindowStart = 0;
+        let burstCooldownUntil = 0;
+
+        function bumpBurst() {
+          const now = Date.now();
+          if (now - burstWindowStart > BURST_WINDOW_MS) {
+            burstWindowStart = now;
+            burstCount = 0;
+          }
+          burstCount++;
+          if (burstCount > BURST_MAX_EVENTS && now > burstCooldownUntil) {
+            burstCooldownUntil = now + BURST_COOLDOWN_MS;
+            log.warn('watcher: event burst — entering cooldown', {
+              events: burstCount,
+              cooldownMs: BURST_COOLDOWN_MS,
+            });
+          }
+        }
+
         function isAudioPath(p) {
           return AUDIO_EXTENSIONS.has(path.extname(p).toLowerCase());
         }
@@ -1779,10 +1837,12 @@ function startServer(port) {
           return parts.some(part => excl.has(part.toLowerCase()));
         }
         function scheduleRescan(reason) {
+          bumpBurst();
+          if (Date.now() < burstCooldownUntil) return;
           if (Date.now() - lastScanTime < 30000) return;
           clearTimeout(rescanTimeout);
           rescanTimeout = setTimeout(async () => {
-            console.log(`File ${reason}, rescanning...`);
+            log.info('watcher rescan', { reason });
             lastScanTime = Date.now();
             await scanFolders();
             broadcast({ type: 'library-updated', data: { count: trackCount() } });

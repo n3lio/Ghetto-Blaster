@@ -1092,3 +1092,122 @@ html[data-theme="auto"] .onboarding-card {
   margin-left: 8px;
 }
 .role-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ─── v3.15: Year + Genres rich library views ────────────────────────────── */
+.lib-empty {
+  padding: 28px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.lib-grid { padding: 16px; overflow-y: auto; }
+
+.decade { margin-bottom: 24px; }
+.decade h3 {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 10px;
+  padding-left: 4px;
+}
+.year-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+.year-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.year-card:hover {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+.year-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.year-card-y { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; }
+.year-card-n { font-size: 0.72rem; color: var(--text-dim); }
+
+.genre-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.genre-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 96px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font);
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  position: relative;
+  overflow: hidden;
+}
+.genre-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+}
+.genre-card:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -3px;
+}
+.genre-card-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: capitalize;
+}
+.genre-card-n {
+  font-size: 0.78rem;
+  opacity: 0.85;
+  align-self: flex-end;
+}
+
+/* ─── v3.15: a11y focus indicators ─────────────────────────────────────── */
+button:focus-visible,
+.tab:focus-visible,
+.lib-view-btn:focus-visible,
+.viz-menu-item:focus-visible,
+.track-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Skip-link: invisible until focused, jumps to main content for keyboard users. */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  background: var(--accent);
+  color: var(--bg);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  z-index: 10000;
+  transition: top 0.15s;
+}
+.skip-link:focus { top: 8px; }

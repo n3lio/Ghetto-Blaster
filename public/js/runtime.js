@@ -1040,6 +1040,412 @@ if ('serviceWorker' in navigator && !window.resonance) {
 //  in edge cases. If pause mid-fade leaves audio.volume low, hitting play
 //  resumes the fade-in correctly.)
 
+// ─── Accessibility helpers (v3.15) ─────────────────────────────────────────
+// Three small additions that cost nothing and help keyboard / screen-reader
+// users a lot:
+//   - ESC closes any open modal-overlay or popover.
+//   - Buttons that only render a glyph (settings gear, ?, win-btns, mini
+//     player, viz menu, mode toggle) get an aria-label so screen readers
+//     can announce them.
+//   - The tab strip becomes a proper role="tablist" with role="tab" on
+//     each tab so AT users get tab-strip semantics for free.
+(function setupA11y() {
+  if (typeof document === 'undefined') return;
+
+  // ESC-to-close. Looks at every visible overlay-style element and closes
+  // the topmost one. Safe even when nothing is open.
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    // Order matters: try the highest z-index containers first.
+    var candidates = [
+      document.querySelector('.modal-overlay.open'),
+      document.getElementById('aboutModal'),
+      document.querySelector('.viz-menu.open'),
+      document.querySelector('.server-popover.open'),
+    ].filter(Boolean);
+    if (candidates.length === 0) return;
+    e.preventDefault();
+    var top = candidates[0];
+    if (top.id === 'settingsModal' || top.classList.contains('modal-overlay')) {
+      // Settings has a Cancel button — synthesize a click for the same path.
+      var cancel = top.querySelector('#settingsCancel');
+      if (cancel) cancel.click(); else top.classList.remove('open');
+    } else if (top.id === 'aboutModal') {
+      top.classList.remove('open');
+      top.style.display = 'none';
+    } else if (top.classList.contains('viz-menu')) {
+      top.classList.remove('open');
+    } else if (top.classList.contains('server-popover')) {
+      top.classList.remove('open');
+    }
+  });
+
+  // ARIA labels for icon-only controls. Only adds them when they're missing
+  // — never overrides a label the legacy markup already set.
+  var labelMap = {
+    settingsBtn: 'Open settings',
+    shortcutsBtn: 'About and shortcuts',
+    tbMin: 'Minimize window',
+    tbMax: 'Maximize window',
+    tbClose: 'Close window',
+    vizGearBtn: 'Visualizer options',
+    refreshUsersBtn: 'Refresh device list',
+  };
+  Object.keys(labelMap).forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el && !el.getAttribute('aria-label')) {
+      el.setAttribute('aria-label', labelMap[id]);
+    }
+  });
+
+  // Tab strip semantics.
+  var tabStrip = document.querySelector('.tabs');
+  if (tabStrip) {
+    tabStrip.setAttribute('role', 'tablist');
+    tabStrip.querySelectorAll('.tab').forEach(function(t) {
+      t.setAttribute('role', 'tab');
+      t.setAttribute('tabindex', '0');
+      // Mark the active one for screen readers.
+      var update = function() {
+        t.setAttribute('aria-selected', t.classList.contains('active') ? 'true' : 'false');
+      };
+      update();
+      t.addEventListener('click', update);
+    });
+  }
+
+  // Make tabs activate on Enter/Space (they're divs, so default key
+  // handling doesn't fire click).
+  document.querySelectorAll('[role="tab"]').forEach(function(t) {
+    t.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        t.click();
+      }
+    });
+  });
+})();
+
+// ─── Gapless playback (v3.15) ──────────────────────────────────────────────
+// Preloads the next queued track into a hidden secondary <audio>, and on
+// `ended` swaps its buffer into the main audio element so playback resumes
+// with no silent gap. Browsers can't do truly sample-accurate gapless
+// without Web Audio AudioBufferSourceNode scheduling, but this preloaded-
+// swap approach gets us within ~30-50ms which is below most listeners'
+// detection threshold for non-DJ-grade material.
+//
+// Disabled while crossfade is on (the two would fight). Toggled via
+// _appConfig.gapless / #settingsGapless.
+(function setupGapless() {
+  if (typeof document === 'undefined') return;
+  var audio = document.querySelector('audio');
+  if (!audio) return;
+
+  // Hidden preloader audio element. Created lazily so the legacy code
+  // doesn't see two <audio>s during init.
+  var preloader = null;
+  function getPreloader() {
+    if (preloader) return preloader;
+    preloader = document.createElement('audio');
+    preloader.preload = 'auto';
+    preloader.style.display = 'none';
+    document.body.appendChild(preloader);
+    return preloader;
+  }
+
+  function gaplessEnabled() {
+    var cfg = window._appConfig || {};
+    return !!cfg.gapless && !cfg.crossfade;
+  }
+  function nextTrackId() {
+    var q = window.queue, idx = window.currentIndex;
+    if (!Array.isArray(q) || typeof idx !== 'number') return null;
+    return q[idx + 1] != null ? q[idx + 1] : null;
+  }
+
+  // Preload the next track when we cross the 10s-from-end mark.
+  audio.addEventListener('timeupdate', function() {
+    if (!gaplessEnabled()) return;
+    if (!audio.duration) return;
+    var remaining = audio.duration - audio.currentTime;
+    if (remaining > 10 || remaining <= 0) return;
+    var nextId = nextTrackId();
+    if (!nextId) return;
+    var url = (typeof window.streamUrl === 'function')
+      ? window.streamUrl(nextId)
+      : '/api/stream/' + nextId;
+    var pre = getPreloader();
+    if (pre.src && pre.src.indexOf('/api/stream/' + nextId) !== -1) return; // already loading
+    pre.src = url;
+    try { pre.load(); } catch (e) { /* ignore */ }
+  });
+
+  // On ended → swap. The legacy 'ended' handler advances the queue and calls
+  // playCurrentTrack(); ours just primes audio.src from the preloader so
+  // the actual play() call by the legacy code reuses the buffered data.
+  audio.addEventListener('ended', function() {
+    if (!gaplessEnabled()) return;
+    var nextId = nextTrackId();
+    if (!nextId || !preloader || !preloader.src) return;
+    if (preloader.src.indexOf('/api/stream/' + nextId) === -1) return;
+    // Move the buffered data into the main audio element by reassigning
+    // its src to the preloader's. The browser reuses the cached HTTP
+    // response so the load is instant.
+    audio.src = preloader.src;
+    try { audio.load(); } catch (e) { /* ignore */ }
+    preloader.removeAttribute('src');
+  }, true); // capture so we run before the legacy listener
+
+  // Wire the Settings checkbox once Settings opens for the first time.
+  function wireCheckbox() {
+    var cb = document.getElementById('settingsGapless');
+    if (!cb || cb._wired) return;
+    cb._wired = true;
+    var cfg = window._appConfig || {};
+    cb.checked = !!cfg.gapless;
+    cb.addEventListener('change', function() {
+      var c = window._appConfig = window._appConfig || {};
+      c.gapless = cb.checked;
+      if (window.resonance && window.resonance.setConfig) {
+        window.resonance.setConfig({ gapless: cb.checked });
+      }
+    });
+  }
+  var settingsBtn = document.getElementById('settingsBtn');
+  if (settingsBtn) settingsBtn.addEventListener('click', function() {
+    setTimeout(wireCheckbox, 50);
+  });
+  // Also try at boot in case Settings markup is already there.
+  setTimeout(wireCheckbox, 1500);
+})();
+
+// ─── Library views: Year + Genres rich (v3.15) ────────────────────────────
+// Two new library tabs that render into #yearList / #genreList. Re-rendered
+// each time their button is clicked or the underlying library changes.
+//
+// Year view: groups tracks by decade then year, with a compact card per
+// year showing count and a click that filters the legacy Tracks view to
+// that year (year:YYYY operator) and switches back.
+//
+// Genres rich: card grid keyed on the genre tag. Click filters Tracks to
+// genre:<name>. Designed to feel like an exploration page rather than a
+// dropdown.
+(function setupYearGenresViews() {
+  if (typeof document === 'undefined') return;
+  var yearList = document.getElementById('yearList');
+  var genreList = document.getElementById('genreList');
+  if (!yearList || !genreList) return;
+
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function libraryTracks() {
+    if (Array.isArray(window.allTracks)) return window.allTracks;
+    if (Array.isArray(window.tracks)) return window.tracks;
+    return [];
+  }
+
+  function pickYear(t) {
+    if (!t) return null;
+    var s = String(t.year || '').match(/^\d{4}/);
+    return s ? parseInt(s[0], 10) : null;
+  }
+
+  function renderYears() {
+    var src = libraryTracks();
+    var byYear = {};
+    src.forEach(function(t) {
+      var y = pickYear(t);
+      if (!y) return;
+      byYear[y] = (byYear[y] || 0) + 1;
+    });
+    var years = Object.keys(byYear).map(Number).sort(function(a, b) { return b - a; });
+    if (years.length === 0) {
+      yearList.innerHTML = '<div class="lib-empty">No year tags in your library yet.</div>';
+      return;
+    }
+    // Group by decade.
+    var decades = {};
+    years.forEach(function(y) {
+      var d = Math.floor(y / 10) * 10;
+      decades[d] = decades[d] || [];
+      decades[d].push(y);
+    });
+    var decadeKeys = Object.keys(decades).map(Number).sort(function(a, b) { return b - a; });
+    yearList.innerHTML = decadeKeys.map(function(d) {
+      var rows = decades[d].map(function(y) {
+        return '<button class="year-card" data-year="' + y + '" aria-label="Filter to year ' + y + '">'
+          + '<span class="year-card-y">' + y + '</span>'
+          + '<span class="year-card-n">' + byYear[y] + '</span>'
+          + '</button>';
+      }).join('');
+      return '<section class="decade">'
+        + '<h3>' + d + 's</h3>'
+        + '<div class="year-grid">' + rows + '</div>'
+        + '</section>';
+    }).join('');
+  }
+
+  function renderGenres() {
+    var src = libraryTracks();
+    var byGenre = {};
+    src.forEach(function(t) {
+      var arr = (t.genres && t.genres.length) ? t.genres : (t.genre ? [t.genre] : []);
+      arr.forEach(function(g) {
+        if (!g) return;
+        var key = String(g).trim();
+        if (!key) return;
+        byGenre[key] = (byGenre[key] || 0) + 1;
+      });
+    });
+    var genres = Object.keys(byGenre).sort(function(a, b) {
+      return byGenre[b] - byGenre[a] || a.localeCompare(b);
+    });
+    if (genres.length === 0) {
+      genreList.innerHTML = '<div class="lib-empty">No genre tags in your library yet.</div>';
+      return;
+    }
+    genreList.innerHTML = '<div class="genre-grid">' + genres.map(function(g) {
+      var hue = 0;
+      // Try to use the genre color helper if it exists in the legacy code.
+      if (typeof window.getGenreStyle === 'function') {
+        try {
+          var s = window.getGenreStyle(g);
+          if (s && typeof s.bg === 'string') {
+            return '<button class="genre-card" data-genre="' + escHtml(g) + '" '
+              + 'style="background:' + s.bg + ';color:' + (s.color || '#fff') + ';" '
+              + 'aria-label="Filter to genre ' + escHtml(g) + '">'
+              + '<span class="genre-card-name">' + escHtml(g) + '</span>'
+              + '<span class="genre-card-n">' + byGenre[g] + '</span>'
+              + '</button>';
+          }
+        } catch (e) { /* ignore */ }
+      }
+      // Fallback: deterministic hue per genre name.
+      for (var i = 0; i < g.length; i++) hue = (hue * 31 + g.charCodeAt(i)) % 360;
+      return '<button class="genre-card" data-genre="' + escHtml(g) + '" '
+        + 'style="background:linear-gradient(135deg, hsl(' + hue + ',45%,28%), hsl(' + ((hue + 35) % 360) + ',55%,18%));color:#fff;" '
+        + 'aria-label="Filter to genre ' + escHtml(g) + '">'
+        + '<span class="genre-card-name">' + escHtml(g) + '</span>'
+        + '<span class="genre-card-n">' + byGenre[g] + '</span>'
+        + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function jumpToTracksWithFilter(query) {
+    // Switch to Tracks view + drop the filter into the search box.
+    var tracksBtn = document.querySelector('.lib-view-btn[data-view="tracks"]');
+    if (tracksBtn) tracksBtn.click();
+    var search = document.getElementById('search');
+    if (search) {
+      search.value = query;
+      search.dispatchEvent(new Event('input'));
+      search.dispatchEvent(new KeyboardEvent('keyup'));
+    }
+  }
+
+  yearList.addEventListener('click', function(e) {
+    var card = e.target.closest && e.target.closest('.year-card');
+    if (!card) return;
+    jumpToTracksWithFilter('year:' + card.dataset.year);
+  });
+  genreList.addEventListener('click', function(e) {
+    var card = e.target.closest && e.target.closest('.genre-card');
+    if (!card) return;
+    jumpToTracksWithFilter('genre:"' + card.dataset.genre + '"');
+  });
+
+  // Re-render when the user clicks the years/genres tab. (Cheap — done on
+  // demand rather than every library refresh.)
+  document.querySelectorAll('.lib-view-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (btn.dataset.view === 'years') renderYears();
+      else if (btn.dataset.view === 'genresrich') renderGenres();
+    });
+  });
+
+  // Refresh after big library updates so the views stay in sync.
+  if (typeof MutationObserver !== 'undefined') {
+    var trackList = document.getElementById('trackList');
+    if (trackList) {
+      var lastRender = 0;
+      new MutationObserver(function() {
+        if (Date.now() - lastRender < 500) return;
+        lastRender = Date.now();
+        if (yearList.style.display !== 'none') renderYears();
+        if (genreList.style.display !== 'none') renderGenres();
+      }).observe(trackList, { childList: true });
+    }
+  }
+})();
+
+// ─── Speed / pitch control (Mixing tab, v3.15) ────────────────────────────
+// Sets `audio.playbackRate` directly. We disable preservesPitch so pitch
+// rises with speed — that's the vinyl/DJ behavior the user asked for, and
+// also what makes "Speed" feel like a real performance control instead of
+// a cold timestretch. Persists in _appConfig.playbackRate.
+(function setupSpeedControl() {
+  if (typeof document === 'undefined') return;
+  var slider = document.getElementById('speedSlider');
+  var valueEl = document.getElementById('speedValue');
+  var resetBtn = document.getElementById('speedReset');
+  var audioEl = document.querySelector('audio');
+  if (!slider || !audioEl) return;
+
+  function applyRate(rate) {
+    audioEl.playbackRate = rate;
+    // Vinyl/DJ feel: pitch tracks speed.
+    audioEl.preservesPitch = false;
+    audioEl.mozPreservesPitch = false;
+    audioEl.webkitPreservesPitch = false;
+    if (valueEl) valueEl.textContent = rate.toFixed(2) + '×';
+  }
+
+  slider.addEventListener('input', function() {
+    var rate = parseFloat(slider.value);
+    if (!isFinite(rate) || rate <= 0) return;
+    applyRate(rate);
+    var cfg = window._appConfig = window._appConfig || {};
+    cfg.playbackRate = rate;
+    if (window.resonance && window.resonance.setConfig) {
+      window.resonance.setConfig({ playbackRate: rate });
+    }
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function() {
+      slider.value = '1';
+      slider.dispatchEvent(new Event('input'));
+    });
+  }
+
+  // Restore on boot.
+  var tries = 0;
+  var iv = setInterval(function() {
+    tries++;
+    if (window._appConfig || tries > 40) {
+      clearInterval(iv);
+      var saved = window._appConfig && window._appConfig.playbackRate;
+      if (typeof saved === 'number' && saved > 0) {
+        slider.value = String(saved);
+        applyRate(saved);
+      } else {
+        applyRate(1);
+      }
+    }
+  }, 250);
+
+  // Each new track resets playbackRate to 1 implicitly on some browsers —
+  // re-apply ours after every loadstart.
+  audioEl.addEventListener('loadstart', function() {
+    var rate = parseFloat(slider.value) || 1;
+    applyRate(rate);
+  });
+})();
+
 // ─── Settings extras (v3.14): theme, sleep timer, backups, radio button ────
 // All injected lazily into #settingsExtras the first time the modal opens,
 // so we don't have to touch the legacy settings markup. Each section is

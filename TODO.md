@@ -16,7 +16,7 @@
 - [x] ~~**`config.port` ignoré au boot Electron**~~ *(P2)* — `main.js` lit `config.port` et passe au server, port effectif récupéré pour `loadURL`.
 - [x] ~~**Helmet CSP désactivé**~~ *(P2)* — CSP minimale activée (self + unsafe-inline pour le moment, à durcir après split frontend).
 - [x] ~~**Pas de cleanup `userCounter` / `uniqueIps`**~~ *(P3)* — `uniqueIps` capé FIFO à 1000 entrées.
-- [ ] **Pas de fallback couverture** *(P2)* — `/api/cover/:id` renvoie 404 si pas de cover ; vérifier que l'UI gère partout (placeholder).
+- [x] ~~**Pas de fallback couverture**~~ *(P2)* — `/api/cover/:id` renvoie un SVG placeholder déterministe (hue dérivé de l'id) au lieu de 404. v3.15.
 
 ## 🔒 Sécurité & robustesse
 
@@ -24,7 +24,7 @@
 - [x] ~~**Rate-limit sur `/api/remote/command`**~~ *(P1)* — 120/min, whitelist de commandes.
 - [x] ~~**Validation stricte des body JSON**~~ *(P1)* — helpers `lib/validation.js` + cap queue 10k + types stricts sur queue/playlists/favorites.
 - [x] ~~**Path traversal**~~ *(P1)* — audité : tous les accès fichiers passent par `library[id]`, le client ne fournit jamais de chemin.
-- [ ] **Limiter taille file watcher** *(P2)* — si l'user ajoute un dossier énorme par erreur, debounce + max items.
+- [x] ~~**Limiter taille file watcher**~~ *(P2)* — burst protection : si > 5000 events en 5s → cooldown 5min avant prochain rescan + log warn. v3.15.
 - [x] ~~**Logs structurés**~~ *(P2)* — `lib/logger.js` (zero dep, JSON Lines + rotation 5×5MB), wired sur server-module + endpoints `/api/_dev/log-tail` & `log-level`.
 
 ## 🧪 Tests & qualité
@@ -61,9 +61,9 @@
 ## 🎵 Features player (desktop)
 
 - [x] ~~**Crossfade configurable**~~ *(P1)* — implé déjà OK (settings.crossfade + duration). v3.9 : ajout safety `pause` qui restore le volume cible si pause manuelle pendant le ramp.
-- [ ] **Gapless playback** *(P2)* — utile pour DJ sets / albums live.
+- [x] ~~**Gapless playback**~~ *(P2)* — preload du next track dans audio caché + swap au `ended`. Toggle dans Settings, désactivé tant que crossfade est on. v3.15.
 - [x] ~~**Égaliseur : sauvegarder le preset utilisateur**~~ *(P2)* — `_appConfig.eqPreset`, restauré au boot, sauvé à chaque change.
-- [ ] **Pitch / speed control** *(P3)* — utile pour DJ.
+- [x] ~~**Pitch / speed control**~~ *(P3)* — slider 0.5×–1.5× dans onglet Mixing (renommé EQ→Mixing), preservesPitch=false (vinyl/DJ feel). v3.15.
 - [x] ~~**ReplayGain / normalisation volume**~~ *(P2)* — extracteur `track.replayGain` (dB) côté serveur, factor multiplicatif sur audio.volume côté renderer (capé à 1 pour éviter clipping).
 - [x] ~~**Sleep timer**~~ *(P3)* — `POST /api/sleep-timer {minutes}` arme un timer côté serveur qui broadcast `pause` après. GET pour status, DELETE pour annuler.
 - [x] ~~**Mode "radio"**~~ *(P3)* — `lib/radio.js` scoring (artist+5, genre+3, year±5+1, albumArtist+1) + jitter. Endpoints `GET /api/radio/seed?trackId` et `POST /api/radio/play`.
@@ -73,31 +73,31 @@
 ## 📱 Mobile / remote
 
 - [ ] **Upload de track depuis mobile vers la lib desktop** *(P3)*.
-- [ ] **Ajouter à la file depuis mobile — vérifier UX queue management** *(P2)*.
+- [x] ~~**Ajouter à la file depuis mobile**~~ *(P2)* — vérifié : remoteAddToQueue + toast 'Added to server queue' déjà câblé. v3.15.
 - [ ] **Multi-room / multi-device sync** *(P3)* — plusieurs enceintes en même temps via WS.
 - [x] ~~**PWA installable**~~ *(P2)* — `manifest.json`, service worker `sw.js` (cache shell), icons 192/512, theme-color, apple-touch-icon.
 - [x] ~~**Media Session API**~~ *(P2)* — métadonnées + handlers play/pause/next/prev poussés à `navigator.mediaSession`, mis à jour via WS state.
-- [ ] **Mode "guest"** *(P3)* — un invité peut ajouter des tracks à la queue mais pas tout casser.
+- [x] ~~**Mode "guest"**~~ *(P3)* — fait en v3.14.0 (toggle dans Devices, badge GUEST mobile, whitelist `GUEST_COMMANDS`).
 
 ## 🎨 UI / UX
 
 - [x] ~~**Drag & drop fichiers/dossiers sur la fenêtre**~~ *(P2)* — drop dossiers (ou fichiers, on remonte au parent) → ajout à `musicFolders` + rescan auto. preload expose `dropPath` via `webUtils.getPathForFile`.
-- [ ] **Vue "Year"** *(P3)* — frise chronologique des albums.
-- [ ] **Vue "Genres" rich** *(P3)* — pas juste un filtre, une vraie page d'exploration.
+- [x] ~~**Vue "Year"**~~ *(P3)* — onglet library, grille décennie/années, click filter sur `year:YYYY`. v3.15.
+- [x] ~~**Vue "Genres" rich**~~ *(P3)* — grid de cartes par genre (couleur déterministe ou getGenreStyle), click filter `genre:"…"`. v3.15.
 - [x] ~~**Recherche : opérateurs**~~ *(P3)* — `lib/query.js` parse `artist:`, `album:`, `genre:`, `title:`, `year:YYYY` ou `year:YYYY..YYYY`, quoted values, multi-valeurs OR. 12 tests. Wired sur `/api/tracks?q=...`.
 - [x] ~~**Mode mini-player**~~ *(P2)* — fenêtre Electron + `body.mini` CSS layout compact (cover 56px + info + transport + progress full-width). Toggle via tray menu ou IPC `miniplayer:toggle`.
 - [x] ~~**Onboarding première utilisation**~~ *(P2)* — overlay `#onboardingOverlay` révélé au boot si `musicFolders` vide ET library vide. Boutons "Choose music folder" (call `window.resonance.pickFolder` + setConfig + rescan) et "Continue with sample tracks" (seed mock library en dev mode).
 - [x] ~~**Drag & drop reorder de la queue**~~ *(P2)* — handlers dragstart/dragover/drop sur `.track-item`, MutationObserver pour rearmer après render, push `/api/queue` après reorder. Mobile reste sur le menu long-press existant.
 - [x] ~~**Theme : dark/light/auto**~~ *(P3)* — `html[data-theme="auto|light|dark"]` + `prefers-color-scheme` media query. Variables CSS overridées dans `style.css`. `window.setTheme(mode)` persiste dans `_appConfig.theme`. Re-applique au changement OS quand auto.
 - [x] ~~**Animations réduites (prefers-reduced-motion)**~~ *(P2)* — `@media (prefers-reduced-motion: reduce)` désactive transforms/spins/pulses, garde transitions opacity courtes.
-- [ ] **A11y : navigation clavier complète + ARIA** *(P2)*.
+- [x] ~~**A11y : navigation clavier complète + ARIA**~~ *(P2)* — ESC ferme modals/popovers, aria-labels sur boutons icon-only, role tablist/tab + tabindex, Enter/Space active les tabs, focus-visible CSS. v3.15.
 
 ## 🎧 Visualizers
 
 - [ ] **Sauvegarder le viz favori par track/genre** *(P3)*.
-- [ ] **Plus de palettes de couleurs** *(P3)*.
+- [x] ~~**Plus de palettes de couleurs**~~ *(P3)* — Retro / Neon / Pastel / Fire / Ocean / Forest dans le menu viz. v3.15.
 - [ ] **Export d'un visualizer en vidéo** *(P3)* — mode démo.
-- [ ] **Mode "ambient"** *(P3)* — viz lent en background quand fenêtre pas focus.
+- [x] ~~**Mode "ambient"**~~ *(P3)* — render every-4th-frame quand `!document.hasFocus()`, pause complète quand `visibilityState==='hidden'`. v3.15.
 
 ## 📚 Bibliothèque
 
@@ -109,7 +109,7 @@
 - [x] ~~**Export bibliothèque (CSV/JSON)**~~ *(P2)* — `GET /api/library/export.{json,csv}` (RFC 4180 escape pour CSV).
 - [x] ~~**Import M3U / M3U8**~~ *(P2)* — `POST /api/playlists/import-m3u`, parser `lib/m3u.js` (BOM, CRLF, EXTINF), résolution par `/api/stream/<id>` puis `(artist,title)` puis basename, tests 9/9.
 - [x] ~~**Export playlist M3U**~~ *(P2)* — `GET /api/playlists/:id/export.m3u`.
-- [ ] **Last.fm scrobbling** *(P3)*.
+- [~] **Last.fm scrobbling** *(P3)* — skipped par n3lio (gadget vs page Stats locale qui suffit).
 
 ## 💾 Données / persistance
 
@@ -123,7 +123,7 @@
 - [x] ~~**Découper `index.html`**~~ *(P1)* — CSS extrait dans `style.css`, JS inline (~2470 lignes) extrait dans `public/js/main.js`. `index.html` à 436 lignes. v3.13 : main.js splitté en 5 modules (base, tracks-queue, playlists-player, viz-settings, runtime).
 - [x] ~~**Bundler frontend (esbuild/vite)**~~ *(P2)* — esbuild setup en `scripts/build-frontend.js` (`npm run build:frontend`/`watch:frontend`). Maintenant que main.js est splitté, on peut le wirer dans le build prod (à confirmer après testing).
 - [x] ~~**Scan en worker thread**~~ *(P2)* — pool `lib/scanner-pool.js`, opt-in via `config.scanInWorker`.
-- [~] **Lazy-load library côté UI** *(P2)* — server prêt + helper `window.gbLazy.loadAll({chunk, onProgress})` dispo côté frontend + warning console au boot si library > 5000. Wiring effectif dans le rendu de la library reste à faire (besoin de virtual scrolling).
+- [x] ~~**Lazy-load library côté UI**~~ *(P2)* — déjà implémenté en batch infinite-scroll dans `tracks-queue.js` (BATCH_SIZE=80, append on scroll). v3.15 confirme : pas besoin de virtual scrolling.
 - [x] ~~**WebSocket : debounce broadcasts d'état**~~ *(P2)* — fenêtre 80ms, collapse les bursts state/desktop:state/users:changed.
 - [x] ~~**Cache HTTP côté covers/streams**~~ *(P2)* — ETag `W/"<size>-<mtime>"` + `Cache-Control: private, max-age=3600` sur `/api/stream`, support 304 sur `If-None-Match`.
 

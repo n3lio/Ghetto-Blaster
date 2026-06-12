@@ -73,7 +73,22 @@ class Visualizer {
         source: 'cover'
       };
     }
-    // Theme mode: derive 3 colors from hue
+    // Hand-tuned palettes — picked so the three colors form a triad that
+    // reads well on the dark canvas. The renderer references c1/c2/c3,
+    // hue is kept around for the few visualizers that still want a base hue.
+    var palettes = {
+      'palette:retro':  { hue: 0,   c1: [232,127,107], c2: [82,176,176],  c3: [232,196,84] },
+      'palette:neon':   { hue: 300, c1: [88,224,232],  c2: [232,76,184],  c3: [184,232,76] },
+      'palette:pastel': { hue: 320, c1: [183,232,200], c2: [200,184,236], c3: [240,196,184] },
+      'palette:fire':   { hue: 18,  c1: [232,72,56],   c2: [240,140,56],  c3: [248,212,72] },
+      'palette:ocean':  { hue: 210, c1: [56,124,232],  c2: [80,196,232],  c3: [88,224,200] },
+      'palette:forest': { hue: 130, c1: [88,176,104],  c2: [56,128,88],   c3: [212,196,124] },
+    };
+    if (palettes[this.colorMode]) {
+      var p = palettes[this.colorMode];
+      return { hue: p.hue, c1: p.c1, c2: p.c2, c3: p.c3, source: this.colorMode };
+    }
+    // Theme mode (default): derive 3 colors from hue
     return {
       hue: hue,
       c1: this.hslToRgb(hue / 360, 0.8, 0.55),
@@ -217,6 +232,19 @@ class Visualizer {
     this.animId = requestAnimationFrame(() => this.loop());
     this.frame++;
     if (!this.analyser) { this.clear(); return; }
+
+    // Ambient mode: when the window doesn't have focus, only redraw every
+    // 4th frame. Keeps the canvas alive (so re-focus is instant) without
+    // burning CPU and battery on a viz nobody is looking at. When the
+    // document is fully hidden, skip drawing entirely — return immediately
+    // and let the next rAF fire when the page comes back.
+    if (typeof document !== 'undefined') {
+      if (document.visibilityState === 'hidden') return;
+      if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
+        if (this.frame % 4 !== 0) return;
+      }
+    }
+
     this.analyser.getByteFrequencyData(this.freqArray);
     this.analyser.getByteTimeDomainData(this.dataArray);
     this.clear();
