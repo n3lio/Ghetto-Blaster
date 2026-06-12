@@ -302,7 +302,11 @@ function renderGenreFilter() {
   html += '</optgroup>';
   sel.innerHTML = html;
 }
-document.getElementById('genreFilter').addEventListener('change', applyFilters);
+// NOTE: this listener (and the others in this file) reference functions
+// defined in playlists-player.js, which the browser hasn't loaded yet at
+// the moment we run. We wrap the call so the lookup happens when the
+// event fires (function exists by then) instead of right now (undefined).
+document.getElementById('genreFilter').addEventListener('change', function() { applyFilters(); });
 
 // ─── Library Views (Tracks / Albums / Artists) ───────────────────────────────
 var currentLibView = 'tracks';

@@ -47,6 +47,10 @@ function streamUrl(id) { return apiUrl('/api/stream/' + id); }
 
 // ─── State ───────────────────────────────────────────────────────────────────
 var tracks = [];        // Currently displayed/filtered tracks in Library
+var allTracks = [];     // Full unfiltered list — populated by fetchTracks()
+                        // (declared here, not in playlists-player.js, so a
+                        //  later `var allTracks = []` doesn't reset what
+                        //  base.js's fetch already wrote.)
 var trackCache = {};    // ID → track object (all tracks ever seen)
 var allGenres = [];
 var playlists = [];

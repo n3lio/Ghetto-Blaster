@@ -517,7 +517,9 @@ document.getElementById('playAll').addEventListener('click', function() {
 });
 
 // ─── Fuzzy Search (client-side, all words must match) ────────────────────────
-var allTracks = []; // Full unfiltered list
+// allTracks is now declared in base.js — re-declaring here would reset it
+// to [] long after fetchTracks() populated it, which silently broke every
+// library view (Tracks/Albums/Artists/Years/Genres) and every filter.
 
 function fuzzyFilter(query) {
   if (!query) return allTracks;

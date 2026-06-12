@@ -1211,3 +1211,96 @@ select:focus-visible {
   transition: top 0.15s;
 }
 .skip-link:focus { top: 8px; }
+
+/* ─── v3.15.4: themed range sliders (Speed, Crossfade duration) ───────────── */
+#speedSlider,
+#settingsCrossfadeDur {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-active);
+  outline: none;
+  cursor: pointer;
+}
+#speedSlider::-webkit-slider-thumb,
+#settingsCrossfadeDur::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-warm);
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+#speedSlider::-moz-range-thumb,
+#settingsCrossfadeDur::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-warm);
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+#speedSlider::-moz-range-track,
+#settingsCrossfadeDur::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-active);
+}
+
+/* ─── v3.15.4: player bar icon size normalisation ─────────────────────────── */
+/* All player buttons use a 16px icon for visual consistency. The svg
+   wrappers had divergent width/height and the volume one was smaller. */
+.player-controls button svg,
+.player-bar .player-controls svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+.volume-control svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* ─── v3.15.4: Settings extras alignment with legacy sections ────────────── */
+/* The injected #settingsExtras used <h3> at uppercase-tracking; the legacy
+   sections use <h4> with a different look. Match the legacy h4 here. */
+#settingsExtras .settings-section { padding-top: 14px; }
+#settingsExtras .settings-section h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+  margin: 0 0 10px;
+}
+/* Buttons in the extras now match the standard add-folder-btn vibe. */
+#settingsExtras .sleep-preset,
+#settingsExtras .sleep-cancel,
+#settingsExtras .backups-actions button,
+#settingsExtras .backup-restore {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 0.83rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+#settingsExtras .sleep-preset:hover,
+#settingsExtras .sleep-cancel:hover,
+#settingsExtras .backups-actions button:hover,
+#settingsExtras .backup-restore:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-hover);
+}
+#settingsExtras .sleep-cancel { color: var(--text-dim); }
+#settingsExtras select,
+#settingsExtras input[type="number"] {
+  font-size: 0.83rem;
+}
