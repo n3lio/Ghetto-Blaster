@@ -9,11 +9,19 @@ const globals = require('globals');
 
 module.exports = [
   // Ignore generated/external files entirely.
+  // public/js/** is the legacy renderer monolith split into modules — it
+  // predates this lint config and uses a lot of `var` / cross-file globals
+  // that ESLint can't reason about without a build step. We lint the Node
+  // side strictly and leave the renderer untouched until it's modularised.
   {
     ignores: [
       'node_modules/**',
       'dist/**',
       'coverage/**',
+      'public/js/**',
+      'public/visualizer.js',
+      'public/sw.js',
+      'dev-data/**',
     ],
   },
 
