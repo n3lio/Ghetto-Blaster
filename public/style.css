@@ -462,27 +462,78 @@
     }
     .np-viz-side canvas { width: 100%; height: 100%; display: block; transition: opacity 0.3s; }
     .np-viz-side:not(.active) canvas { opacity: 0; }
+    /* ─── Now Playing track info card (over the visualizer) ──────────────
+       Layout: bottom-anchored stack — title, artist, meta line, then the
+       Radio button. `top` is set so the whole block is bounded above too,
+       which means when the user drags the queue resizer all the way up
+       and shrinks np-viz-side, the text gets clipped instead of spilling
+       out the top of the panel. A subtle gradient mask softens that clip. */
     .np-track-info {
-      position: absolute; bottom: 16px; left: 20px; right: 60px; pointer-events: none; z-index: 5;
-      display: flex; flex-direction: column; justify-content: flex-end;
+      position: absolute;
+      top: 16px; bottom: 16px; left: 20px; right: 20px;
+      pointer-events: none;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: flex-start;
+      gap: 4px;
+      overflow: hidden;
+      min-height: 0;
+      /* Fade the top edge so a clipped title doesn't look like a hard cut. */
+      mask-image: linear-gradient(180deg, transparent 0, #000 18px, #000 100%);
+      -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 18px, #000 100%);
     }
     .np-track-title {
-      font-size: 1.3rem; font-weight: 700; color: #f0ebe4;
-      text-shadow: 0 2px 12px rgba(0,0,0,0.7); line-height: 1.3;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      text-shadow: 0 2px 14px rgba(0,0,0,0.75);
     }
     .np-track-artist {
-      font-size: 0.9rem; font-weight: 500; color: rgba(240,235,228,0.75);
-      text-shadow: 0 1px 8px rgba(0,0,0,0.6); margin-top: 3px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      text-shadow: 0 1px 10px rgba(0,0,0,0.65);
     }
     .np-track-meta {
-      font-size: 0.78rem; font-weight: 400; color: rgba(240,235,228,0.5);
-      text-shadow: 0 1px 6px rgba(0,0,0,0.5); margin-top: 4px;
+      font-size: 0.78rem;
+      font-weight: 400;
+      color: var(--text-dim);
+      line-height: 1.4;
+      max-width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      margin-top: 2px;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.55);
+    }
+    .np-track-meta > div {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
     }
     .np-track-meta .np-genre-tag {
-      font-size: 0.66rem; padding: 3px 7px; border-radius: 12px; font-weight: 500;
-      display: inline-block; margin-top: 10px;
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      padding: 3px 9px;
+      border-radius: 999px;
+      display: inline-block;
+      align-self: flex-start;
     }
     .np-vresizer {
       height: 6px; cursor: row-resize; background: transparent;
@@ -1066,23 +1117,30 @@ html[data-theme="auto"] .onboarding-card {
 #settingsExtras .backup-restore:hover { background: var(--accent-subtle); }
 
 /* ─── Radio button on Now Playing ───────────────────────────────────────── */
-/* The button is appended into .np-track-info, which itself has
-   pointer-events:none so the visualizer underneath stays interactive.
-   Re-enable pointer-events on the button so it receives clicks. */
+/* Sits inside .np-track-info, which is pointer-events:none so the
+   visualizer underneath keeps its hover. Re-enable on the button itself.
+   Restraint > shouty: subtle outlined accent pill so it sits next to the
+   meta line without competing with the title for attention. */
 .np-radio-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--accent); color: var(--bg);
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--accent);
   border: 1px solid var(--accent);
   border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 0.78rem; font-weight: 600;
-  font-family: var(--font); cursor: pointer; margin-top: 10px;
-  transition: background 0.15s ease, transform 0.1s ease, filter 0.15s ease;
+  padding: 5px 13px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-family: var(--font);
+  cursor: pointer;
+  margin-top: 12px;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
   pointer-events: auto;
   align-self: flex-start;
-  box-shadow: 0 4px 14px var(--accent-glow);
+  text-shadow: none;
+  backdrop-filter: blur(4px);
 }
-.np-radio-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.np-radio-btn:hover { background: var(--accent); color: var(--bg); transform: translateY(-1px); }
 .np-radio-btn:active { transform: none; }
 
 /* ─── Guest badge ───────────────────────────────────────────────────────── */
