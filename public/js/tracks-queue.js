@@ -348,6 +348,10 @@ document.querySelectorAll('.lib-view-btn').forEach(function(btn) {
     document.getElementById('artistList').style.display = currentLibView === 'artists' ? '' : 'none';
     document.getElementById('yearList').style.display = currentLibView === 'years' ? '' : 'none';
     document.getElementById('genreList').style.display = currentLibView === 'genresrich' ? '' : 'none';
+    // Sort dropdown is meaningless on Years/Genres (the views have their
+    // own intrinsic ordering) — hide it there to remove the dead control.
+    var sortSel = document.getElementById('sortSelect');
+    if (sortSel) sortSel.style.display = (currentLibView === 'years' || currentLibView === 'genresrich') ? 'none' : '';
     tracks = allTracks.slice();
     // Hide duration sort options for Albums/Artists views (makes no sense)
     updateSortOptions();

@@ -1196,6 +1196,13 @@ function startServer(port) {
         }
         pl.genreMatch = body.genreMatch;
       }
+      if (body.genreExclude !== undefined) {
+        if (!Array.isArray(body.genreExclude) || !body.genreExclude.every(g => typeof g === 'string')) {
+          return res.status(400).json({ error: 'genreExclude must be an array of strings' });
+        }
+        // [] clears the field (UI semantics: empty input = no exclusions).
+        pl.genreExclude = body.genreExclude.length ? body.genreExclude : null;
+      }
       if (body.trackIds !== undefined) {
         if (!isIntegerArray(body.trackIds)) {
           return res.status(400).json({ error: 'trackIds must be an array of integers' });

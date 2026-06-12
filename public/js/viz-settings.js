@@ -27,7 +27,7 @@ function toggleViz() {
   else { if (viz) viz.stop(); }
 }
 
-var vizColorMode = 'theme';
+var vizColorMode = 'cover';
 document.getElementById('vizGearBtn').addEventListener('click', function(e) { e.stopPropagation(); document.getElementById('vizMenu').classList.toggle('open'); });
 document.addEventListener('click', function() { document.getElementById('vizMenu').classList.remove('open'); });
 // Shape selection
@@ -188,6 +188,12 @@ async function openSettings() {
   if (window.resonance) {
     var cfg = await window.resonance.getConfig();
     settingsFolders = cfg.musicFolders || [];
+    // Snapshot the folders the user opened the modal with, so saveSettings
+    // can detect a real change. _appConfig was sometimes empty when the
+    // modal opened, which made saveSettings think every save changed
+    // folders and the 'Library outdated' badge appeared even when the
+    // user hadn't touched the folder list.
+    window._settingsOpenFolders = (cfg.musicFolders || []).slice();
     // Refresh the update pill every time Settings opens — covers the case
     // where the modal opens before any updater event has fired and the
     // pill would otherwise show stale '— not checked yet'.
@@ -319,10 +325,11 @@ document.getElementById('downloadQrBtn').addEventListener('click', function() {
 async function saveSettings(opts) {
   var doRescan = opts && opts.rescan;
   // Detect a folders change so we can flag 'library outdated' if the user
-  // saves without rescanning. Read the previous folders from _appConfig
-  // (populated by openSettings) so we don't compare against stale state.
-  var prevFolders = (window._appConfig && Array.isArray(window._appConfig.musicFolders))
-    ? window._appConfig.musicFolders.slice() : [];
+  // saves without rescanning. Use the snapshot taken at modal open time —
+  // _appConfig.musicFolders can lag during boot which made every save look
+  // like a change.
+  var prevFolders = Array.isArray(window._settingsOpenFolders)
+    ? window._settingsOpenFolders.slice() : (settingsFolders || []).slice();
   var foldersChanged = JSON.stringify(prevFolders.slice().sort())
                     !== JSON.stringify(settingsFolders.slice().sort());
   vizMode = document.getElementById('settingsVizMode').value;
@@ -618,18 +625,55 @@ if (isDesktop) {
     }).catch(function() { /* ignore */ });
   }
 
-  // Settings: Check for updates button
+  // Settings: Check for updates button — visually dynamic so the user
+  // sees that something is happening:
+  //   1. click → button shows 'Checking…' + disabled while in flight,
+  //      pill flips to 'checking' state via syncSettingsUpdate.
+  //   2. event-driven onUpdate{Available,UpToDate,Error} restores the
+  //      button text + state.
+  //   3. safety timeout 30s → re-enable button and surface 'No response
+  //      from update server — retry?' on the pill.
   document.getElementById('settingsCheckUpdate').addEventListener('click', function() {
-    var label = document.getElementById('settingsUpdateStatus');
+    var btn = this;
     if (window._updateState.status === 'available' || window._updateState.status === 'error') {
       triggerDownload();
-    } else if (window._updateState.status === 'ready') {
-      window.resonance.restartToUpdate();
-    } else {
-      label.textContent = 'Checking…';
-      label.style.color = 'var(--text-dim)'; label.style.borderColor = 'var(--border)';
-      window.resonance.checkForUpdates();
+      return;
     }
+    if (window._updateState.status === 'ready') {
+      window.resonance.restartToUpdate();
+      return;
+    }
+    var originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    btn.classList.add('is-checking');
+    window._updateState = { status: 'checking', version: null, percent: null };
+    syncSettingsUpdate();
+    window.resonance.checkForUpdates();
+    var restored = false;
+    function restoreButton() {
+      if (restored) return;
+      restored = true;
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      btn.classList.remove('is-checking');
+    }
+    var safety = setTimeout(function() {
+      if (window._updateState.status === 'checking') {
+        window._updateState = { status: 'error', error: 'No response from update server' };
+        syncSettingsUpdate();
+      }
+      restoreButton();
+    }, 30000);
+    // Restore as soon as ANY update event lands on the renderer (the
+    // existing onUpdate* handlers already mutate _updateState).
+    var poll = setInterval(function() {
+      if (window._updateState && window._updateState.status !== 'checking') {
+        clearTimeout(safety);
+        clearInterval(poll);
+        restoreButton();
+      }
+    }, 250);
   });
 }
 

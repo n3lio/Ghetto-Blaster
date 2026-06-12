@@ -1388,15 +1388,9 @@ select:focus-visible {
   color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
-.toolbar-input-wrap.has-value::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--accent);
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  pointer-events: none;
-}
+/* (v3.15.8 left-rail accent removed in v3.15.10 — the user found it
+   visually distracting. The has-value border tint on the input itself
+   already signals an active filter clearly enough.) */
 .toolbar-input-wrap { position: relative; }
 
 /* ─── v3.15.8 : Years timeline + clustered Genres ──────────────────────── */
@@ -1638,3 +1632,104 @@ html[data-theme="auto"] #aboutModal .about-card * {
      fill). */
   color: var(--text) !important;
 }
+
+/* ─── v3.15.10 settings polish round 2 ─────────────────────────────────── */
+
+/* Theme dropdown font: was inheriting browser default (~16px) which made
+   the options look way bigger than every other select in the modal. */
+#settingsExtras select,
+#settingsExtras option,
+#settingsExtras input {
+  font-size: 0.83rem !important;
+  font-family: var(--font);
+}
+
+/* Sleep timer custom field: 'Custom' label + input + 'min' suffix, all
+   on one baseline. Previous version had the label sitting above and
+   'CUSTOMmin' running together when whitespace collapsed. */
+.sleep-custom-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  height: 32px;
+  box-sizing: border-box;
+}
+.sleep-custom-wrap:focus-within { border-color: var(--accent); }
+.sleep-custom-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.sleep-custom-unit {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+#settingsExtras #sleepCustomMin {
+  border: none !important;
+  background: transparent !important;
+  width: 50px;
+  padding: 0 !important;
+  font-size: 0.85rem !important;
+  color: var(--text);
+  -moz-appearance: textfield; /* hide spinners in Firefox */
+}
+#settingsExtras #sleepCustomMin::-webkit-outer-spin-button,
+#settingsExtras #sleepCustomMin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#settingsExtras #sleepCustomMin:focus { outline: none; }
+
+/* Sleep timer presets + cancel: keep them all on the same baseline. */
+.sleep-timer-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+/* Kill any stray border/separator that sneaks in right after a section
+   heading inside #settingsExtras. The user keeps reporting horizontal
+   bars under THEME / SLEEP TIMER / BACKUPS — most likely the *first*
+   child of the section was inheriting a border-top from an earlier
+   utility class. Force no border on the first descendant of every
+   extras section, and on the heading itself. */
+#settingsExtras .settings-section h3,
+#settingsExtras .settings-section h3 + *,
+#settingsExtras .settings-section > *:first-child,
+#settingsExtras .settings-section > *:nth-child(2) {
+  border-top: none !important;
+}
+#settingsExtras .settings-section h3 {
+  margin-bottom: 10px !important;
+  border-bottom: none !important;
+}
+
+/* Update check button — animated pulse while in flight so the user
+   sees something happen even if the autoUpdater takes its time. */
+.add-folder-btn.is-checking {
+  background: var(--accent-subtle);
+  color: var(--text-dim);
+  border-color: var(--accent);
+  cursor: progress;
+  position: relative;
+}
+.add-folder-btn.is-checking::after {
+  content: '';
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--text-dim);
+  border-top-color: var(--accent);
+  margin-left: 8px;
+  vertical-align: -2px;
+  animation: gb-spin 0.9s linear infinite;
+}
+@keyframes gb-spin { to { transform: rotate(360deg); } }

@@ -112,13 +112,19 @@ function renderPlaylists() {
         // Open edit modal
         document.getElementById('editPlName').value = pl.name || '';
         var genreRow = document.getElementById('editPlGenreRow');
+        var excludeRow = document.getElementById('editPlExcludeRow');
         var genreInput = document.getElementById('editPlGenres');
+        var excludeInput = document.getElementById('editPlExcludes');
         if (pl.type === 'smart') {
           genreRow.style.display = '';
+          if (excludeRow) excludeRow.style.display = '';
           genreInput.value = (pl.genreMatch || []).join(', ');
+          if (excludeInput) excludeInput.value = (pl.genreExclude || []).join(', ');
         } else {
           genreRow.style.display = 'none';
+          if (excludeRow) excludeRow.style.display = 'none';
           genreInput.value = '';
+          if (excludeInput) excludeInput.value = '';
         }
         document.getElementById('editPlModal').classList.add('open');
         document.getElementById('editPlModal').dataset.plId = plId;
@@ -188,6 +194,16 @@ document.getElementById('editPlSave').addEventListener('click', async function()
   if (plType === 'smart') {
     var genres = document.getElementById('editPlGenres').value.trim();
     if (genres) body.genreMatch = genres.split(',').map(function(g){ return g.trim().toLowerCase(); }).filter(Boolean);
+    // Empty exclude string clears the list — we send [] explicitly so the
+    // server PUT handler resets the field rather than leaving the old
+    // exclusions in place.
+    var excludesRaw = (document.getElementById('editPlExcludes') || {}).value;
+    if (excludesRaw != null) {
+      var excludes = String(excludesRaw).trim();
+      body.genreExclude = excludes
+        ? excludes.split(',').map(function(g){ return g.trim().toLowerCase(); }).filter(Boolean)
+        : [];
+    }
   }
   var r = await api('/playlists/' + plId, 'PUT', body);
   if (r.ok) { modal.classList.remove('open'); fetchPlaylists(true); showToast('Playlist updated'); }

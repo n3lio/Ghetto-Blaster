@@ -49,7 +49,6 @@
 
 <header>
   <h1>Ghetto <b>Blaster</b></h1>
-  <span class="scan-indicator" id="scanIndicator" style="display:none;font-size:0.72rem;color:var(--accent);animation:pulse 1.2s infinite;">Scanning...</span>
   <span id="updateBadge" style="display:none;font-size:0.68rem;color:var(--green);background:rgba(122,196,122,0.1);padding:3px 8px;border-radius:12px;cursor:pointer;border:1px solid rgba(122,196,122,0.3);"></span>
   <span id="rescanNeededBadge" style="display:none;font-size:0.68rem;color:var(--accent);background:var(--accent-subtle);padding:3px 10px;border-radius:12px;cursor:pointer;border:1px solid var(--accent);font-weight:600;letter-spacing:0.02em;" title="You changed music folders without scanning. Click to rescan now.">Library outdated · Scan</span>
   <div class="header-right">
@@ -57,6 +56,7 @@
       <button class="mode-btn active" data-mode="remote">Remote</button>
       <button class="mode-btn" data-mode="stream" disabled title="Coming soon" style="opacity:0.4;cursor:not-allowed;">Stream</button>
     </div>
+    <span class="scan-indicator" id="scanIndicator" style="display:none;font-size:0.72rem;color:var(--accent);animation:pulse 1.2s infinite;">Scanning…</span>
     <span class="server-pill on" id="serverPill" style="display:none;cursor:pointer;" title="Click for server details">
       <span class="dot"></span>
       <span class="server-label">Online</span>
@@ -118,8 +118,8 @@
             <div class="viz-menu-item" data-viz="circular">Circular</div>
             <div class="viz-menu-item" data-viz="text">Text</div>
             <div class="viz-menu-label">Colors</div>
-            <div class="viz-menu-item active" data-color="theme">Theme (auto)</div>
-            <div class="viz-menu-item" data-color="cover">Cover</div>
+            <div class="viz-menu-item" data-color="theme">Theme (auto)</div>
+            <div class="viz-menu-item active" data-color="cover">Cover</div>
             <div class="viz-menu-item" data-color="palette:retro">Retro</div>
             <div class="viz-menu-item" data-color="palette:neon">Neon</div>
             <div class="viz-menu-item" data-color="palette:pastel">Pastel</div>
@@ -480,8 +480,14 @@
       <label>Name</label>
       <input type="text" id="editPlName" placeholder="Playlist name...">
       <div id="editPlGenreRow" style="margin-top:14px;">
-        <label>Genre keywords (comma separated)</label>
+        <label>Include — genre keywords (comma separated)</label>
         <input type="text" id="editPlGenres" placeholder="hip-hop, rap, trap...">
+        <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0;">A track matches if its genre tag contains any of these words.</p>
+      </div>
+      <div id="editPlExcludeRow" style="margin-top:14px;">
+        <label>Exclude — drop tracks whose genre also matches</label>
+        <input type="text" id="editPlExcludes" placeholder="rap français, french rap...">
+        <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0;">Useful to keep close-but-not-quite genres out (e.g. exclude 'rap français' from a US Hip-Hop list).</p>
       </div>
     </div>
     <div class="modal-actions">
