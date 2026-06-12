@@ -497,28 +497,30 @@
       text-shadow: 0 2px 14px rgba(0,0,0,0.75);
     }
     .np-track-artist {
-      font-size: 0.95rem;
-      font-weight: 500;
-      color: var(--text-muted);
-      line-height: 1.35;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+      opacity: 0.92;
+      line-height: 1.3;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       max-width: 100%;
-      text-shadow: 0 1px 10px rgba(0,0,0,0.65);
+      text-shadow: 0 1px 10px rgba(0,0,0,0.7);
     }
     .np-track-meta {
-      font-size: 0.78rem;
-      font-weight: 400;
-      color: var(--text-dim);
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text);
+      opacity: 0.78;
       line-height: 1.4;
       max-width: 100%;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       gap: 6px;
-      margin-top: 2px;
-      text-shadow: 0 1px 8px rgba(0,0,0,0.55);
+      margin-top: 4px;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.65);
     }
     .np-track-meta > div {
       white-space: nowrap;
@@ -1518,4 +1520,121 @@ select:focus-visible {
   background: color-mix(in srgb, var(--g-color, var(--accent)) 14%, transparent);
   border-radius: 999px;
   flex-shrink: 0;
+}
+
+/* ─── v3.15.9 : Sleep timer custom wrap — label inline + input ────────── */
+.sleep-custom-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.sleep-custom-wrap:focus-within {
+  border-color: var(--accent);
+}
+.sleep-custom-label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+#settingsExtras #sleepCustomMin {
+  border: none;
+  background: transparent;
+  width: 70px;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+#settingsExtras #sleepCustomMin:focus { outline: none; }
+
+/* ─── v3.15.9 : Years timeline polish (taller, highlights selection) ──── */
+.yt-canvas { height: 280px; }
+.yt-bar.in-selection {
+  background: var(--accent-hover);
+  filter: brightness(1.3);
+}
+.yt-readout {
+  display: flex; align-items: center; justify-content: center;
+  gap: 14px;
+  font-size: 0.85rem;
+  margin-top: 10px;
+  min-height: 1.8em;
+}
+.yt-readout button {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 14px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: filter 0.15s;
+}
+.yt-readout button:hover { filter: brightness(1.1); }
+.yt-readout .yt-cancel {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+.yt-readout .yt-cancel:hover { color: var(--text); border-color: var(--text-muted); }
+
+/* ─── v3.15.9 : Light mode coverage for previously-hardcoded surfaces ─── */
+html[data-theme="light"] .player-bar,
+html[data-theme="auto"] .player-bar {
+  background: var(--bg-warm) !important;
+  border-top: 1px solid var(--border);
+}
+html[data-theme="light"] .player-cover .ph,
+html[data-theme="auto"] .player-cover .ph {
+  background: linear-gradient(135deg, var(--surface), var(--surface-active));
+}
+/* Modal overlays were rgba(22,21,20,...) — patch them via the html attr. */
+html[data-theme="light"] .modal-overlay > div,
+html[data-theme="auto"] .modal-overlay > div,
+html[data-theme="light"] #aboutModal .about-card,
+html[data-theme="auto"] #aboutModal .about-card,
+html[data-theme="light"] .server-popover,
+html[data-theme="auto"] .server-popover {
+  background: var(--surface) !important;
+  color: var(--text);
+  border-color: var(--border) !important;
+}
+html[data-theme="light"] .modal-overlay,
+html[data-theme="auto"] .modal-overlay {
+  background: rgba(50,45,40,0.35) !important;
+}
+/* Settings checkboxes/inputs/selects in light. */
+html[data-theme="light"] .modal-overlay select,
+html[data-theme="auto"] .modal-overlay select,
+html[data-theme="light"] .modal-overlay input[type="text"],
+html[data-theme="auto"] .modal-overlay input[type="text"],
+html[data-theme="light"] .modal-overlay input[type="number"],
+html[data-theme="auto"] .modal-overlay input[type="number"] {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+/* About modal text */
+html[data-theme="light"] #aboutModal,
+html[data-theme="auto"] #aboutModal { color: var(--text); }
+html[data-theme="light"] #aboutModal .about-card *,
+html[data-theme="auto"] #aboutModal .about-card * {
+  color: inherit;
+}
+
+/* ─── v3.15.9 : Fix toolbar filter contrast under any theme ──────────── */
+.toolbar-input-wrap.has-value input,
+.toolbar-select-wrap.has-value .genre-select.active {
+  /* Keep the accent border but use --text for the typed value so it's
+     legible on either dark or light backgrounds (was always var(--accent),
+     which on a light bg was nearly invisible against the subtle accent
+     fill). */
+  color: var(--text) !important;
 }

@@ -511,9 +511,19 @@ if (isDesktop) {
   // Show Devices + Stats tabs (desktop only)
   document.getElementById('devicesTab').style.display = '';
   document.getElementById('statsTab').style.display = '';
-  document.querySelector('[data-tab="devices"]').addEventListener('click', function() { fetchUsers(); fetchOutputDevices(); });
-  document.querySelector('[data-tab="stats"]').addEventListener('click', fetchStats);
-  document.getElementById('refreshUsersBtn').addEventListener('click', fetchUsers);
+  // Wrap cross-file references in inline functions: fetchStats lives in
+  // runtime.js, which loads after this file. Passing the bare reference
+  // captures `undefined` at registration time and the click did nothing.
+  document.querySelector('[data-tab="devices"]').addEventListener('click', function() {
+    if (typeof fetchUsers === 'function') fetchUsers();
+    if (typeof fetchOutputDevices === 'function') fetchOutputDevices();
+  });
+  document.querySelector('[data-tab="stats"]').addEventListener('click', function() {
+    if (typeof fetchStats === 'function') fetchStats();
+  });
+  document.getElementById('refreshUsersBtn').addEventListener('click', function() {
+    if (typeof fetchUsers === 'function') fetchUsers();
+  });
   setInterval(function() { if (document.getElementById('panel-devices').classList.contains('active')) fetchUsers(); }, 10000);
 
   // Updates — wire IPC events to global state + badge

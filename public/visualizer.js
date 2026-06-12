@@ -227,6 +227,33 @@ class Visualizer {
     catch(e) { return 38; }
   }
 
+  // Returns an `rgba(R,G,B,a)` string sampled from the current theme's
+  // --bg variable. Used by every viz for the per-frame fade so the
+  // canvas darkens / lightens with the theme instead of always trailing
+  // black. Cached for the lifetime of the loop and refreshed on a theme
+  // change because the loop reads it at high frequency.
+  _themeBgRgba(alpha) {
+    if (this._themeBgCache == null || (this.frame % 120 === 0)) {
+      var raw = '0,0,0';
+      try {
+        var bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+        // Accept #rrggbb / #rgb / rgb()/rgba() / hsl()/hsla()
+        if (bg.startsWith('#')) {
+          if (bg.length === 4) bg = '#' + bg[1]+bg[1] + bg[2]+bg[2] + bg[3]+bg[3];
+          var r = parseInt(bg.slice(1, 3), 16);
+          var g = parseInt(bg.slice(3, 5), 16);
+          var b = parseInt(bg.slice(5, 7), 16);
+          if ([r,g,b].every(Number.isFinite)) raw = r + ',' + g + ',' + b;
+        } else if (bg.startsWith('rgb')) {
+          var m = bg.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+          if (m) raw = m[1] + ',' + m[2] + ',' + m[3];
+        }
+      } catch (e) { /* fall back to black */ }
+      this._themeBgCache = raw;
+    }
+    return 'rgba(' + this._themeBgCache + ',' + alpha + ')';
+  }
+
   loop() {
     if (!this.running) return;
     this.animId = requestAnimationFrame(() => this.loop());
@@ -287,7 +314,7 @@ class Visualizer {
     const high = this.boost(this.getAvg(24, 50));
     const t = this.frame * 0.012;
 
-    ctx.fillStyle = 'rgba(10,10,11,' + (0.04 + (1 - bass) * 0.04) + ')';
+    ctx.fillStyle = this._themeBgRgba(0.04 + (1 - bass) * 0.04);
     ctx.fillRect(0, 0, w, h);
 
     const layers = [
@@ -315,7 +342,7 @@ class Visualizer {
     const high = this.boost(this.getAvg(24, 50));
     const t = this.frame * 0.01;
 
-    ctx.fillStyle = 'rgba(10,10,11,' + (0.04 + (1 - bass) * 0.04) + ')';
+    ctx.fillStyle = this._themeBgRgba(0.04 + (1 - bass) * 0.04);
     ctx.fillRect(0, 0, w, h);
 
     // Nebula background
@@ -402,7 +429,7 @@ class Visualizer {
     const energy = bass * 0.5 + mid * 0.3 + high * 0.2;
     const t = this.frame;
 
-    ctx.fillStyle = 'rgba(10,10,11,' + (0.2 + (1 - bass) * 0.15) + ')';
+    ctx.fillStyle = this._themeBgRgba(0.2 + (1 - bass) * 0.15);
     ctx.fillRect(0, 0, w, h);
 
     // Subtle background glow from colors
@@ -509,7 +536,7 @@ class Visualizer {
     const mid = this.boost(this.getAvg(6, 16));
     // Slightly more aggressive trail clearing so older particles fade fast
     // instead of layering up into noise.
-    ctx.fillStyle = 'rgba(10,10,11,' + (0.10 + (1 - bass) * 0.05) + ')';
+    ctx.fillStyle = this._themeBgRgba(0.10 + (1 - bass) * 0.05);
     ctx.fillRect(0, 0, w, h);
 
     for (const p of this.particles) {
@@ -638,7 +665,7 @@ class Visualizer {
     const t = this.frame;
     const energy = bass * 0.6 + mid * 0.4;
 
-    ctx.fillStyle = 'rgba(10,10,11,0.035)'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = this._themeBgRgba(0.035); ctx.fillRect(0, 0, w, h);
 
     const title = (this.trackTitle || 'GHETTO BLASTER').toUpperCase();
     const artist = (this.trackArtist || '').toUpperCase();

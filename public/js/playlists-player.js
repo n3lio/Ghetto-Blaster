@@ -45,9 +45,8 @@ function renderPlaylists() {
   view.innerHTML = playlists.map(function(p, i) {
     var color = getPlaylistColor(p, i);
     var icon = '<div style="width:40px;height:40px;border-radius:8px;background:' + color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem;font-weight:700;color:#0a0a0b;">' + esc(p.name.charAt(0).toUpperCase()) + '</div>';
-    var smartTag = p.type === 'smart' ? '<span style="font-size:0.6rem;color:var(--text-dim);background:var(--surface);padding:2px 5px;border-radius:8px;margin-left:6px;">Smart</span>' : '';
     return '<div class="playlist-card" draggable="true" data-id="' + p.id + '" data-idx="' + i + '">' + icon +
-      '<div style="flex:1;min-width:0;margin-left:12px;"><div class="pl-name">' + esc(p.name) + smartTag + '</div><div class="pl-count">' + p.trackCount + ' tracks</div></div>' +
+      '<div style="flex:1;min-width:0;margin-left:12px;"><div class="pl-name">' + esc(p.name) + '</div><div class="pl-count">' + p.trackCount + ' tracks</div></div>' +
       '<div class="pl-actions"><button class="pl-btn play-pl" data-id="' + p.id + '">Play</button><button class="pl-btn edit-pl" data-id="' + p.id + '">Edit</button><button class="pl-btn del" data-id="' + p.id + '">Delete</button></div></div>';
   }).join('');
 

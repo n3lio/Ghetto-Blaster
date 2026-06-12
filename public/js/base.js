@@ -74,12 +74,12 @@ var GENRE_COLORS = [
   { match: ['rock','punk','metal','grunge','hard rock'], color: '#e05555', bg: 'rgba(224,85,85,0.12)' }, // red
   { match: ['electro','electronic','edm','house','techno','trance','dubstep'], color: '#06b6d4', bg: 'rgba(6,182,212,0.14)' }, // cyan (was steel blue, now distinct from Rap FR)
   { match: ['reggae','ragga','dancehall','dub','ska'], color: '#27ae60', bg: 'rgba(39,174,96,0.12)' }, // green
-  { match: ['jazz','swing','bebop','bossa','fusion'], color: '#e8a435', bg: 'rgba(232,164,53,0.12)' }, // amber
+  { match: ['jazz','swing','bebop','bossa','fusion'], color: '#d4a843', bg: 'rgba(212,168,67,0.12)' }, // amber gold (less orange)
   { match: ['classical','classique','baroque','romantic','orchestral','orchestra','symphony','concerto','chamber','opera'], color: '#8e8e93', bg: 'rgba(142,142,147,0.1)' }, // grey
   { match: ['pop','synth-pop','synthpop','k-pop','kpop'], color: '#e06b9f', bg: 'rgba(224,107,159,0.12)' }, // pink
   { match: ['r&b','rnb','rhythm and blues','motown','soul','neo-soul','neo soul'], color: '#c47a7a', bg: 'rgba(196,122,122,0.12)' }, // rose
   { match: ['blues'], color: '#4a90d9', bg: 'rgba(74,144,217,0.12)' }, // mid blue
-  { match: ['latin','reggaeton','salsa','bachata','cumbia','latino'], color: '#f39c12', bg: 'rgba(243,156,18,0.12)' }, // orange
+  { match: ['latin','reggaeton','salsa','bachata','cumbia','latino'], color: '#e76f51', bg: 'rgba(231,111,81,0.14)' }, // terracotta orange-red (clearly distinct from Jazz amber)
   { match: ['alternative','indie','alt'], color: '#4dd4ac', bg: 'rgba(77,212,172,0.12)' }, // teal
   { match: ['country','folk','americana'], color: '#d4a76a', bg: 'rgba(212,167,106,0.12)' }, // tan
   { match: ['funk','disco'], color: '#e8c83a', bg: 'rgba(232,200,58,0.12)' }, // gold

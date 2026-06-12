@@ -429,14 +429,18 @@
 
     <div class="settings-section" id="settingsUpdatesSection">
       <h4>Updates</h4>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <span style="font-size:0.82rem;color:var(--text);font-weight:500;" id="settingsVersionLabel">v—</span>
-        <span id="settingsUpdateStatus" style="font-size:0.68rem;padding:4px 10px;border-radius:12px;border:1px solid var(--border);color:var(--text-dim);font-weight:500;transition:all 0.3s;"></span>
-      </div>
-      <div id="settingsUpdateActions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <button id="settingsCheckUpdate" class="add-folder-btn" style="margin-top:0;">Check for updates</button>
+      <!-- Two-column layout: version + status pill on the left, links on
+           the right. The 'Check for updates' button moves below as a full-
+           width action so it's discoverable even when the version line is
+           tight. -->
+      <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:0.82rem;color:var(--text);font-weight:500;" id="settingsVersionLabel">v—</span>
+          <span id="settingsUpdateStatus" style="font-size:0.68rem;padding:4px 10px;border-radius:12px;border:1px solid var(--border);color:var(--text-dim);font-weight:500;transition:all 0.3s;"></span>
+        </div>
         <a href="https://github.com/n3lio/Ghetto-Blaster/releases" target="_blank" rel="noopener" class="settings-link-btn">GitHub Releases ↗</a>
       </div>
+      <button id="settingsCheckUpdate" class="add-folder-btn" style="margin-top:0;">Check for updates</button>
     </div>
 
     <!-- v3.14 add-ons (theme / sleep timer / backups). Filled by runtime.js

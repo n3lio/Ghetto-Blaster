@@ -1339,6 +1339,14 @@ if ('serviceWorker' in navigator && !window.resonance) {
       var x = Math.max(0, Math.min(rect.width, clientX - rect.left));
       return paddedMin + Math.floor((x / rect.width) * span);
     }
+    var pendingRange = null; // {lo, hi} after mouse-up, before Apply
+    var bars = canvas.querySelectorAll('.yt-bar');
+    function highlightBars(lo, hi) {
+      bars.forEach(function(b) {
+        var y = parseInt(b.dataset.year, 10);
+        b.classList.toggle('in-selection', y >= lo && y <= hi);
+      });
+    }
     function showSelection(a, b) {
       var lo = Math.min(a, b), hi = Math.max(a, b);
       var leftPct = ((lo - paddedMin) / span) * 100;
@@ -1346,19 +1354,44 @@ if ('serviceWorker' in navigator && !window.resonance) {
       sel.style.display = 'block';
       sel.style.left = leftPct.toFixed(3) + '%';
       sel.style.width = widthPct.toFixed(3) + '%';
+      highlightBars(lo, hi);
       var n = 0;
       for (var k = lo; k <= hi; k++) n += (byYear[k] || 0);
-      readout.textContent = lo === hi
-        ? lo + ' — ' + n + ' track' + (n !== 1 ? 's' : '')
-        : lo + '–' + hi + ' — ' + n + ' track' + (n !== 1 ? 's' : '');
+      var label = lo === hi
+        ? '<strong>' + lo + '</strong> — ' + n + ' track' + (n !== 1 ? 's' : '')
+        : '<strong>' + lo + '–' + hi + '</strong> — ' + n + ' track' + (n !== 1 ? 's' : '');
+      // While dragging, just show the label. Apply/Cancel buttons appear
+      // on mouseup so the user can reconsider before the filter switches
+      // them out of the Years view.
+      readout.innerHTML = '<span>' + label + '</span>';
     }
-    function clearSelection() {
-      sel.style.display = 'none';
-      readout.textContent = '';
-      dragStart = null;
+    function showApplyControls(lo, hi) {
+      pendingRange = { lo: lo, hi: hi };
+      var n = 0;
+      for (var k = lo; k <= hi; k++) n += (byYear[k] || 0);
+      var label = lo === hi
+        ? '<strong>' + lo + '</strong> — ' + n + ' track' + (n !== 1 ? 's' : '')
+        : '<strong>' + lo + '–' + hi + '</strong> — ' + n + ' track' + (n !== 1 ? 's' : '');
+      readout.innerHTML = '<span>' + label + '</span>'
+        + '<button type="button" class="yt-apply">Filter tracks</button>'
+        + '<button type="button" class="yt-cancel">Cancel</button>';
+      readout.querySelector('.yt-apply').addEventListener('click', function() {
+        if (!pendingRange) return;
+        var query = pendingRange.lo === pendingRange.hi
+          ? 'year:' + pendingRange.lo
+          : 'year:' + pendingRange.lo + '..' + pendingRange.hi;
+        jumpToTracksWithFilter(query);
+      });
+      readout.querySelector('.yt-cancel').addEventListener('click', function() {
+        pendingRange = null;
+        sel.style.display = 'none';
+        highlightBars(-1, -1);
+        readout.innerHTML = '';
+      });
     }
     canvas.addEventListener('mousedown', function(e) {
       e.preventDefault();
+      pendingRange = null;
       dragStart = yearAt(e.clientX);
       showSelection(dragStart, dragStart);
     });
@@ -1366,19 +1399,15 @@ if ('serviceWorker' in navigator && !window.resonance) {
       if (dragStart == null) return;
       showSelection(dragStart, yearAt(e.clientX));
     });
-    canvas.addEventListener('mouseleave', function() {
-      // Don't cancel — user may release outside the canvas.
-    });
     document.addEventListener('mouseup', function(e) {
       if (dragStart == null) return;
       var endY = yearAt(e.clientX);
       var lo = Math.min(dragStart, endY);
       var hi = Math.max(dragStart, endY);
       dragStart = null;
-      // Single-year click goes through year:YYYY, range goes through
-      // year:YYYY..YYYY. The fuzzy filter handles both.
-      var query = lo === hi ? 'year:' + lo : 'year:' + lo + '..' + hi;
-      jumpToTracksWithFilter(query);
+      // Show Apply / Cancel instead of jumping immediately so the user
+      // can refine the range or back out without losing their place.
+      showApplyControls(lo, hi);
     });
   }
 
@@ -1688,18 +1717,20 @@ if ('serviceWorker' in navigator && !window.resonance) {
       + '</div>'
       + '<div class="settings-section"><h3>Sleep timer</h3>'
       +   '<div class="sleep-timer-row">'
-      +     '<button class="sleep-preset" data-min="15">15 min</button>'
       +     '<button class="sleep-preset" data-min="30">30 min</button>'
       +     '<button class="sleep-preset" data-min="60">1 h</button>'
       +     '<button class="sleep-preset" data-min="90">1 h 30</button>'
-      +     '<input type="number" min="1" max="1440" id="sleepCustomMin" placeholder="custom (min)">'
+      +     '<button class="sleep-preset" data-min="120">2 h</button>'
+      +     '<label class="sleep-custom-wrap"><span class="sleep-custom-label">Custom</span>'
+      +       '<input type="number" min="1" max="1440" id="sleepCustomMin" placeholder="min">'
+      +     '</label>'
       +     '<button id="sleepCancelBtn" class="sleep-cancel">Cancel</button>'
       +   '</div>'
       +   '<p id="sleepTimerStatus" class="settings-hint">No timer set</p>'
       + '</div>'
       + '<div class="settings-section"><h3>Backups</h3>'
-      +   '<p class="settings-hint">Daily snapshot of your playlists, history, favorites, and config (kept 7 days).</p>'
-      +   '<div class="backups-actions">'
+      +   '<p class="settings-hint" style="margin-bottom:12px;">Daily snapshot of your playlists, history, favorites and config (kept 7 days).</p>'
+      +   '<div class="backups-actions" style="margin-bottom:12px;">'
       +     '<button id="backupNowBtn">Snapshot now</button>'
       +     '<button id="backupRefreshBtn">Refresh list</button>'
       +   '</div>'
@@ -1758,12 +1789,14 @@ if ('serviceWorker' in navigator && !window.resonance) {
     });
     var custom = document.getElementById('sleepCustomMin');
     if (custom) {
-      custom.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-          var v = parseInt(custom.value, 10);
-          if (Number.isFinite(v) && v > 0) { startSleep(v); custom.value = ''; }
-        }
-      });
+      // Trigger on Enter OR on blur with a value present, so the user
+      // doesn't need to know to press Enter.
+      var fire = function() {
+        var v = parseInt(custom.value, 10);
+        if (Number.isFinite(v) && v > 0) { startSleep(v); custom.value = ''; }
+      };
+      custom.addEventListener('keydown', function(e) { if (e.key === 'Enter') fire(); });
+      custom.addEventListener('blur', function() { if (custom.value) fire(); });
     }
     var cancel = document.getElementById('sleepCancelBtn');
     if (cancel) {
@@ -1859,17 +1892,31 @@ if ('serviceWorker' in navigator && !window.resonance) {
   btn.addEventListener('click', function() {
     var id = currentTrackId();
     if (id == null) return;
-    fetch('/api/radio/play', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trackId: id, limit: 50 }),
-    }).then(function(r) { return r.json(); }).then(function(d) {
-      if (d.ok) {
-        showToast('Radio queue: ' + d.length + ' tracks');
-      } else {
-        showToast('Could not start radio: ' + (d.error || 'unknown'));
-      }
-    }).catch(function() {});
+    // Desktop owns its queue locally — POST /api/radio/play sets the
+    // server queue (mobile remote uses that path), but the desktop
+    // renderer reads its own window.queue. Ask the server to build the
+    // mix (GET seed) and apply the ids ourselves.
+    fetch('/api/radio/seed?trackId=' + id + '&limit=50')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d || !Array.isArray(d.ids) || d.ids.length === 0) {
+          showToast('Radio: nothing similar found');
+          return;
+        }
+        // Cache the new tracks so the legacy renderQueue can resolve
+        // titles without a round-trip.
+        if (Array.isArray(d.tracks) && typeof window.cacheTrack === 'function') {
+          d.tracks.forEach(window.cacheTrack);
+        }
+        window.queue = d.ids.slice();
+        window.currentIndex = 0;
+        if (typeof window.playCurrentTrack === 'function') window.playCurrentTrack();
+        if (typeof window.renderQueue === 'function') window.renderQueue();
+        showToast('Radio mix: ' + d.ids.length + ' tracks');
+      })
+      .catch(function(e) {
+        showToast('Radio failed: ' + (e && e.message ? e.message : 'network error'));
+      });
   });
 
   // The button visibility tracks the currentIndex changes — poll cheap and
