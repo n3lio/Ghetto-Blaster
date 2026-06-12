@@ -115,10 +115,14 @@ test('POST /api/remote/command accepts whitelisted commands', async () => {
   assert.equal(res.body.ok, true);
 });
 
-test('GET /api/cover/abc returns 400/404 for non-numeric id', async () => {
-  // parseInt('abc') is NaN → getTrackById returns null → 404.
+test('GET /api/cover/<bogus> falls back to a placeholder SVG (v3.15)', async () => {
+  // v3.15 changed the policy: missing or unknown covers no longer 404,
+  // they render a deterministic placeholder so the UI never has a
+  // broken-image gap. Status should be 200 with image/svg+xml.
   const res = await request(baseUrl).get('/api/cover/abc');
-  assert.equal(res.status, 404);
+  assert.equal(res.status, 200);
+  assert.ok((res.headers['content-type'] || '').startsWith('image/svg+xml'));
+  assert.ok(res.text.includes('<svg'));
 });
 
 test('GET /api/stream/9999 returns 404 for unknown track', async () => {
