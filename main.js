@@ -6,6 +6,8 @@ const { startServer, stopServer, isRunning, getLanIp, getConfig, saveConfig, set
 
 let mainWindow = null;
 let tray = null;
+let serverPort = 3000;
+const isDev = process.argv.includes('--dev');
 
 // ─── Single Instance Lock ───────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -45,7 +47,32 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    if (isDev) {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
   });
+
+  if (isDev) {
+    // Renderer hot reload: watch public/ and tell the window to reload when
+    // anything in it changes. Cheap fs.watch is fine — we don't need the
+    // full chokidar machinery for a dev-only loop.
+    try {
+      const watchDir = path.join(__dirname, 'public');
+      let reloadTimer = null;
+      fs.watch(watchDir, { recursive: true }, (event, filename) => {
+        if (!filename) return;
+        clearTimeout(reloadTimer);
+        reloadTimer = setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            console.log(`[dev] reload (${filename})`);
+            mainWindow.webContents.reloadIgnoringCache();
+          }
+        }, 200);
+      });
+    } catch (e) {
+      console.warn('[dev] hot reload watcher failed:', e.message);
+    }
+  }
 
   mainWindow.on('close', () => {
     app.isQuitting = true;
@@ -72,6 +99,7 @@ function createTray() {
 }
 
 function updateTrayMenu() {
+  const port = (getConfig() && getConfig().port) || 3000;
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Open Ghetto Blaster',
@@ -79,8 +107,12 @@ function updateTrayMenu() {
         if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
       },
     },
+    {
+      label: 'Mini Player',
+      click: () => toggleMiniPlayer(),
+    },
     { type: 'separator' },
-    { label: `Server: ${getLanIp()}:3000`, enabled: false },
+    { label: `Server: ${getLanIp()}:${port}`, enabled: false },
     { type: 'separator' },
     {
       label: 'Quit',
@@ -124,7 +156,7 @@ function notifyRenderer(channel, data) {
 
 // ─── IPC Handlers ───────────────────────────────────────────────────────────
 ipcMain.handle('server:status', () => {
-  return { running: true, ip: getLanIp(), port: 3000 };
+  return { running: true, ip: getLanIp(), port: serverPort };
 });
 
 ipcMain.handle('app:version', () => app.getVersion());
@@ -165,6 +197,42 @@ ipcMain.handle('config:pick-folder', async () => {
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
+
+// ─── Mini-player (compact, always-on-top) ──────────────────────────────────
+let miniWindow = null;
+
+function toggleMiniPlayer() {
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.close();
+    return;
+  }
+  miniWindow = new BrowserWindow({
+    width: 360,
+    height: 120,
+    minWidth: 280,
+    minHeight: 90,
+    resizable: true,
+    alwaysOnTop: true,
+    frame: false,
+    skipTaskbar: false,
+    title: 'Ghetto Blaster — Mini',
+    icon: getIconPath(),
+    backgroundColor: '#0a0a0b',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  miniWindow.setMenu(null);
+  // Reuse the same SPA — `?mini=1` lets the renderer switch to a compact
+  // layout. If it isn't wired yet (Phase 6 frontend work), the page just
+  // renders normally inside a small window — usable but not pretty.
+  miniWindow.loadURL(`http://localhost:${serverPort}/?mini=1`);
+  miniWindow.on('closed', () => { miniWindow = null; });
+}
+
+ipcMain.handle('miniplayer:toggle', () => { toggleMiniPlayer(); });
 
 // ─── Auto Updater ───────────────────────────────────────────────────────────
 function setupAutoUpdater() {
@@ -259,16 +327,24 @@ app.whenReady().then(async () => {
   // Set data dir to userData (persists across updates)
   setDataDir(app.getPath('userData'));
 
+  // Resolve port from config (fallback 3000)
+  const cfg = getConfig() || {};
+  const desiredPort = Number.isInteger(cfg.port) && cfg.port > 0 && cfg.port < 65536
+    ? cfg.port
+    : 3000;
+
   // Always start server locally (UI needs it for fetch/WS)
   try {
-    await startServer(3000);
-    console.log('Server started on port 3000');
+    const result = await startServer(desiredPort);
+    serverPort = (result && result.port) || desiredPort;
+    console.log(`Server started on port ${serverPort}`);
   } catch (err) {
     console.error('Failed to start server:', err.message);
+    serverPort = desiredPort;
   }
 
   createWindow();
-  mainWindow.loadURL('http://localhost:3000');
+  mainWindow.loadURL(`http://localhost:${serverPort}`);
 
   // Close splash when main window is ready (min 1.5s display)
   const splashStart = Date.now();

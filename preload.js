@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('resonance', {
   // Server info
   getServerStatus: () => ipcRenderer.invoke('server:status'),
 
+  // Mini-player toggle
+  toggleMiniPlayer: () => ipcRenderer.invoke('miniplayer:toggle'),
+
   // Config / Settings
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (config) => ipcRenderer.invoke('config:set', config),

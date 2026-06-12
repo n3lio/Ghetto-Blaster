@@ -6,8 +6,23 @@ on:
       - 'v*'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm run lint
+      - run: npm test
+
   build:
+    needs: test
     runs-on: windows-latest
+    timeout-minutes: 30
 
     permissions:
       contents: write
@@ -15,35 +30,57 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Need history for changelog generation.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
+
+      - name: Generate changelog from git log
+        id: changelog
+        shell: bash
+        run: |
+          # Get the previous tag, or the very first commit if there is none.
+          PREV_TAG=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          echo "Previous: $PREV_TAG"
+          {
+            echo 'CHANGELOG<<EOF'
+            git log --pretty=format:'- %s' "${PREV_TAG}..${{ github.ref_name }}" | grep -v -E '^- (Bump version|Merge pull request|Merge branch)' || echo '- (no changes recorded)'
+            echo
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build Electron app
         run: npx electron-builder --win --publish never
 
       - name: Upload artifacts to GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.exe
             dist/*.yml
             dist/*.yaml
+            dist/*.blockmap
           body: |
             ## Ghetto Blaster ${{ github.ref_name }}
 
             ### Download
-            Download `Ghetto-Blaster-Setup-*.exe` below and run the installer.
+            Grab `Ghetto-Blaster-Setup-*.exe` below and run the installer.
+
+            > **Note:** Windows may show a SmartScreen warning (Unknown publisher).
+            > Click **More info** → **Run anyway**.
 
             ### What's new
-            See [commit history](https://github.com/n3lio/Ghetto-Blaster/commits/${{ github.ref_name }}) for changes.
+            ${{ steps.changelog.outputs.CHANGELOG }}
 
             ---
-            *Auto-built from tag `${{ github.ref_name }}`*
+            *Auto-built from tag `${{ github.ref_name }}` — full diff: <https://github.com/n3lio/Ghetto-Blaster/compare/${{ github.ref_name }}...HEAD>*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

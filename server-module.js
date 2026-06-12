@@ -7,8 +7,16 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const QRCode = require('qrcode');
+const validation = require('./lib/validation');
+const playlistLib = require('./lib/playlists');
+const { ScannerPool } = require('./lib/scanner-pool');
+let scannerPool = null;
+// chokidar is more reliable than fs.watch (esp. recursive on Windows)
+let chokidar = null;
+try { chokidar = require('chokidar'); } catch (e) { /* optional dep, falls back to fs.watch */ }
 let serverInstance = null;
 let wssInstance = null;
+let watcherInstance = null;
 
 // ─── Data directory (set by main.js before startServer, or fallback to __dirname)
 let DATA_DIR = __dirname;
@@ -105,7 +113,15 @@ function getOrAssignTrackId(canonicalPath) {
 }
 
 // ─── Config (stored in userData so it survives updates) ─────────────────────
-const DEFAULT_CONFIG = { musicFolders: [], excludeFolders: [], port: 3000, scanOnStartup: true, watchForChanges: true };
+const DEFAULT_CONFIG = {
+  musicFolders: [],
+  excludeFolders: [],
+  port: 3000,
+  scanOnStartup: true,
+  watchForChanges: true,
+  maxConnections: 20,
+  lanEnabled: true,
+};
 
 function getConfigPath() { return path.join(DATA_DIR, 'config.json'); }
 
@@ -201,8 +217,34 @@ function getCoversDir() { return path.join(DATA_DIR, '__covers'); }
 (function() { var d = getCoversDir(); if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); })();
 
 // ─── Library Scanner ─────────────────────────────────────────────────────────
-const AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.flac', '.ogg', '.wav', '.aac']);
+const AUDIO_EXTENSIONS = validation.AUDIO_EXTENSIONS;
 let scanning = false;
+
+// Resolves to a normalized metadata shape regardless of whether parsing happens
+// inline (default) or in a worker (opt-in via config.scanInWorker).
+async function parseTrackMetadata(filePath) {
+  if (scannerPool && scannerPool.available()) {
+    try {
+      const r = await scannerPool.parseFile(filePath);
+      return {
+        common: {
+          title: r.title || undefined,
+          artist: r.artist || undefined,
+          albumartist: r.albumArtist || undefined,
+          album: r.album || undefined,
+          year: r.year || undefined,
+          genre: r.genre ? [r.genre] : undefined,
+          picture: r.picture ? [{ data: Buffer.from(r.picture.data), format: r.picture.format }] : undefined,
+        },
+        format: { duration: r.duration || 0 },
+      };
+    } catch (e) {
+      // Worker failed for this file — fall back to inline parse so we don't
+      // lose the track entirely.
+    }
+  }
+  return parseFile(filePath);
+}
 
 async function scanFolders() {
   if (scanning) { console.log('Scan already in progress, skipping'); return library; }
@@ -210,6 +252,16 @@ async function scanFolders() {
 
   // Reload config (may have been updated via settings)
   config = loadConfig();
+
+  // Lazily start the worker pool when explicitly enabled. Off by default —
+  // the cost is small at scan time and the failure mode is well-tested inline.
+  if (config.scanInWorker && !scannerPool) {
+    const pool = new ScannerPool();
+    if (pool.start()) {
+      scannerPool = pool;
+      console.log(`Scanner pool started (${pool.size} workers)`);
+    }
+  }
 
   const excludeFolders = new Set((config.excludeFolders || []).map(f => f.toLowerCase()));
 
@@ -221,14 +273,11 @@ async function scanFolders() {
   // Track which paths are seen this scan (to prune deleted entries from the id map)
   const seenPaths = new Set();
 
-  // Clear cover cache before rescan
-  try {
-    const existing = fs.readdirSync(getCoversDir());
-    for (const file of existing) {
-      fs.unlinkSync(path.join(getCoversDir(), file));
-    }
-  } catch (e) { /* ignore */ }
-
+  // Cover cache strategy: keep what we have, regenerate only when missing or
+  // when the source file's mtime changed since the cache was written. After
+  // the scan we delete cover files whose track id no longer exists.
+  // (Old behaviour was to wipe everything on every rescan — slow on large
+  // libraries.)
   for (const folder of config.musicFolders) {
     const resolved = path.resolve(folder);
     if (!fs.existsSync(resolved)) {
@@ -244,11 +293,54 @@ async function scanFolders() {
   }
   saveLibraryIds();
 
+  // Sweep cover cache: remove files whose track id is no longer in the library.
+  try {
+    const validIds = new Set();
+    for (let i = 0; i < library.length; i++) if (library[i] != null) validIds.add(String(library[i].id));
+    const existing = fs.readdirSync(getCoversDir());
+    for (const file of existing) {
+      const dot = file.lastIndexOf('.');
+      const idStr = dot === -1 ? file : file.slice(0, dot);
+      if (!validIds.has(idStr)) {
+        try { fs.unlinkSync(path.join(getCoversDir(), file)); } catch (e) { /* ignore */ }
+      }
+    }
+  } catch (e) { /* ignore */ }
+
   scanning = false;
   const count = library.filter(Boolean).length;
   console.log(`Found ${count} tracks, ${genres.size} genres`);
   broadcast({ type: 'scan:done', data: { count, genres: genres.size } });
   return library;
+}
+
+// Returns the cover file path for a given track id if one is already cached
+// and matches the source file's mtime. The cache stores `<id>.<ext>` next to
+// `<id>.<ext>.mtime` (a tiny sidecar holding the source mtime as ms since epoch).
+function findCachedCover(trackId, sourceMtimeMs) {
+  const dir = getCoversDir();
+  for (const ext of ['.jpg', '.png', '.webp', '.gif']) {
+    const coverPath = path.join(dir, `${trackId}${ext}`);
+    if (!fs.existsSync(coverPath)) continue;
+    const sidecar = coverPath + '.mtime';
+    try {
+      if (fs.existsSync(sidecar)) {
+        const stored = parseInt(fs.readFileSync(sidecar, 'utf8'), 10);
+        if (stored === Math.floor(sourceMtimeMs)) return coverPath;
+      }
+    } catch (e) { /* ignore */ }
+  }
+  return null;
+}
+
+function writeCachedCover(trackId, ext, data, sourceMtimeMs) {
+  const coverPath = path.join(getCoversDir(), `${trackId}${ext}`);
+  try {
+    fs.writeFileSync(coverPath, data);
+    fs.writeFileSync(coverPath + '.mtime', String(Math.floor(sourceMtimeMs)));
+  } catch (e) {
+    console.warn(`Could not cache cover for track ${trackId}:`, e.message);
+  }
 }
 
 async function scanDirectory(dir, excludeFolders, seenPaths) {
@@ -273,27 +365,28 @@ async function scanDirectory(dir, excludeFolders, seenPaths) {
     } else if (AUDIO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       const trackId = getOrAssignTrackId(fullPath);
       if (seenPaths) seenPaths.add(fullPath);
+      let mtimeMs = 0;
+      try { mtimeMs = fs.statSync(fullPath).mtimeMs; } catch (e) { /* ignore */ }
       try {
-        const metadata = await parseFile(fullPath);
+        // Skip metadata re-parse when the file mtime matches a cached cover —
+        // we still parse for tags (cheap), but we avoid re-decoding/writing the
+        // picture buffer when nothing changed.
+        const cachedCoverPath = findCachedCover(trackId, mtimeMs);
+        const metadata = await parseTrackMetadata(fullPath);
         const genre = metadata.common.genre ? metadata.common.genre[0] : null;
         if (genre) genres.add(genre);
 
         const picture = metadata.common.picture && metadata.common.picture[0];
-        const hasCover = !!picture;
+        const hasCover = !!picture || !!cachedCoverPath;
 
-        if (hasCover) {
+        if (picture && !cachedCoverPath) {
           let ext = '.jpg';
           if (picture.format) {
             if (picture.format.includes('png')) ext = '.png';
             else if (picture.format.includes('webp')) ext = '.webp';
             else if (picture.format.includes('gif')) ext = '.gif';
           }
-          const coverPath = path.join(getCoversDir(), `${trackId}${ext}`);
-          try {
-            fs.writeFileSync(coverPath, picture.data);
-          } catch (writeErr) {
-            console.warn(`Could not cache cover for track ${trackId}:`, writeErr.message);
-          }
+          writeCachedCover(trackId, ext, picture.data, mtimeMs);
         }
 
         library[trackId] = {
@@ -350,7 +443,38 @@ function trackCount() {
 // ─── WebSocket ───────────────────────────────────────────────────────────────
 const clients = new Set();
 
+// Debounced broadcasts: collapse bursts of the same `type` (e.g. state updates
+// during a big scan) into one delivery per ~80ms. Without this, heavy scans
+// can overwhelm mobile clients with hundreds of WS frames per second.
+const DEBOUNCED_TYPES = new Set(['state', 'desktop:state', 'users:changed']);
+const _pendingBroadcasts = new Map(); // type → { timer, lastMessage }
+
+function _flushBroadcast(type) {
+  const entry = _pendingBroadcasts.get(type);
+  if (!entry) return;
+  _pendingBroadcasts.delete(type);
+  const payload = JSON.stringify(entry.lastMessage);
+  clients.forEach(ws => {
+    if (ws.readyState === 1) ws.send(payload);
+  });
+}
+
 function broadcast(message) {
+  if (message && DEBOUNCED_TYPES.has(message.type)) {
+    let entry = _pendingBroadcasts.get(message.type);
+    if (entry) {
+      // Replace the queued message with the latest snapshot — clients only
+      // need the most recent state, not every intermediate one.
+      entry.lastMessage = message;
+      return;
+    }
+    entry = { lastMessage: message, timer: null };
+    entry.timer = setTimeout(() => _flushBroadcast(message.type), 80);
+    _pendingBroadcasts.set(message.type, entry);
+    return;
+  }
+  // Non-debounced events (scan:start, scan:done, library-updated, etc.) go
+  // out immediately — they're rare and clients react synchronously.
   const payload = JSON.stringify(message);
   clients.forEach(ws => {
     if (ws.readyState === 1) ws.send(payload);
@@ -395,9 +519,27 @@ function startServer(port) {
 
     const app = express();
 
-    // Security
+    // ─── Security: minimal CSP ──────────────────────────────────────────────
+    // The renderer is fully self-hosted (no external CDNs). All JS/CSS is
+    // currently inline in public/index.html, so we allow 'unsafe-inline' until
+    // Phase 4 splits them out. Audio/cover assets come from the same origin.
+    // WebSocket explicit because helmet would otherwise block ws:// in CSP.
     app.use(helmet({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'blob:'],
+          mediaSrc: ["'self'", 'blob:'],
+          fontSrc: ["'self'", 'data:'],
+          connectSrc: ["'self'", 'ws:', 'wss:', 'http:', 'https:'],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'self'"],
+        },
+      },
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }));
@@ -416,6 +558,16 @@ function startServer(port) {
       windowMs: 5 * 60 * 1000,
       max: 3,
       message: { error: 'Rescan limited to 3 per 5 minutes.' },
+    });
+
+    // Tighter limit on the remote command endpoint to make spam from a
+    // misbehaving (or malicious) LAN client harder.
+    const remoteLimiter = rateLimit({
+      windowMs: 60 * 1000,
+      max: 120,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: 'Too many remote commands.' },
     });
 
     app.use(express.json({ limit: '10mb' }));
@@ -536,10 +688,17 @@ function startServer(port) {
       }
     });
 
+    // ─── Body validation helpers ────────────────────────────────────────────
+    const MAX_QUEUE_LEN = 10000;
+    function isIntegerArray(arr) {
+      return Array.isArray(arr) && arr.every(x => Number.isInteger(x));
+    }
+
     // Queue Management
     app.post('/api/queue', (req, res) => {
-      const { trackIds } = req.body;
-      if (!Array.isArray(trackIds)) return res.status(400).json({ error: 'trackIds must be an array' });
+      const { trackIds } = req.body || {};
+      if (!isIntegerArray(trackIds)) return res.status(400).json({ error: 'trackIds must be an array of integers' });
+      if (trackIds.length > MAX_QUEUE_LEN) return res.status(400).json({ error: 'queue too large' });
       queue = trackIds.filter(isValidTrackId);
       currentIndex = 0;
       isPlaying = false;
@@ -548,9 +707,12 @@ function startServer(port) {
     });
 
     app.post('/api/queue/add', (req, res) => {
-      const { trackIds } = req.body;
-      if (!Array.isArray(trackIds)) return res.status(400).json({ error: 'trackIds must be an array' });
+      const { trackIds } = req.body || {};
+      if (!isIntegerArray(trackIds)) return res.status(400).json({ error: 'trackIds must be an array of integers' });
       const valid = trackIds.filter(isValidTrackId);
+      if (queue.length + valid.length > MAX_QUEUE_LEN) {
+        return res.status(400).json({ error: 'queue would exceed max size' });
+      }
       queue.push(...valid);
       broadcast({ type: 'state', data: getState() });
       res.json({ ok: true, queueLength: queue.length });
@@ -671,11 +833,25 @@ function startServer(port) {
     });
 
     // Remote commands (mobile → desktop via WS broadcast)
-    app.post('/api/remote/command', (req, res) => {
-      const { command } = req.body;
-      if (!command) return res.status(400).json({ error: 'command required' });
+    // Whitelist of accepted commands — drops anything unexpected so a
+    // misbehaving client can't trick the desktop into running random ops.
+    const REMOTE_COMMANDS = new Set([
+      'play', 'pause', 'next', 'prev', 'shuffle', 'seek', 'volume', 'mute',
+      'play-track', 'play-playlist', 'queue-add', 'queue-set', 'queue-remove',
+      'queue-clear', 'queue-reorder', 'set-output', 'rescan', 'set-eq',
+      'set-crossfade', 'toggle-favorite', 'set-viz',
+    ]);
+    app.post('/api/remote/command', remoteLimiter, (req, res) => {
+      const body = req.body || {};
+      const { command } = body;
+      if (!command || typeof command !== 'string') {
+        return res.status(400).json({ error: 'command required' });
+      }
+      if (!REMOTE_COMMANDS.has(command)) {
+        return res.status(400).json({ error: 'unknown command' });
+      }
       // Broadcast entire payload (command + trackId/playlistId/etc.)
-      broadcast({ type: 'remote:command', data: req.body });
+      broadcast({ type: 'remote:command', data: body });
       res.json({ ok: true });
     });
 
@@ -776,9 +952,25 @@ function startServer(port) {
     app.put('/api/playlists/:id', (req, res) => {
       const pl = playlists.find(p => p.id === req.params.id);
       if (!pl) return res.status(404).json({ error: 'Playlist not found' });
-      if (req.body.name) pl.name = req.body.name;
-      if (req.body.genreMatch) pl.genreMatch = req.body.genreMatch;
-      if (req.body.trackIds) pl.trackIds = req.body.trackIds;
+      const body = req.body || {};
+      if (body.name !== undefined) {
+        if (typeof body.name !== 'string' || !body.name.trim()) {
+          return res.status(400).json({ error: 'name must be a non-empty string' });
+        }
+        pl.name = body.name.trim().slice(0, 100);
+      }
+      if (body.genreMatch !== undefined) {
+        if (!Array.isArray(body.genreMatch) || !body.genreMatch.every(g => typeof g === 'string')) {
+          return res.status(400).json({ error: 'genreMatch must be an array of strings' });
+        }
+        pl.genreMatch = body.genreMatch;
+      }
+      if (body.trackIds !== undefined) {
+        if (!isIntegerArray(body.trackIds)) {
+          return res.status(400).json({ error: 'trackIds must be an array of integers' });
+        }
+        pl.trackIds = body.trackIds.filter(isValidTrackId);
+      }
       savePlaylists();
       res.json({ ok: true });
     });
@@ -824,8 +1016,10 @@ function startServer(port) {
     });
 
     app.post('/api/favorites/toggle', (req, res) => {
-      const { trackId } = req.body;
-      if (trackId == null) return res.status(400).json({ error: 'trackId required' });
+      const { trackId } = req.body || {};
+      if (!Number.isInteger(trackId) || !isValidTrackId(trackId)) {
+        return res.status(400).json({ error: 'valid trackId required' });
+      }
       if (favorites.has(trackId)) favorites.delete(trackId);
       else favorites.add(trackId);
       saveFavorites();
@@ -865,6 +1059,97 @@ function startServer(port) {
       });
     });
 
+    // ─── Duplicates (titre + artiste + durée arrondie) ─────────────────────
+    app.get('/api/duplicates', (req, res) => {
+      const buckets = new Map();
+      for (let i = 0; i < library.length; i++) {
+        const t = library[i];
+        if (!t) continue;
+        const key = [
+          (t.title || '').trim().toLowerCase(),
+          (t.artist || '').trim().toLowerCase(),
+          Math.round(t.duration || 0),
+        ].join('|');
+        if (!key.startsWith('||')) {
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push({
+            id: t.id, title: t.title, artist: t.artist, album: t.album,
+            duration: t.duration, hasCover: t.hasCover, filename: t.filename,
+          });
+        }
+      }
+      const dupes = [];
+      for (const arr of buckets.values()) {
+        if (arr.length > 1) dupes.push(arr);
+      }
+      res.json({ groups: dupes, totalGroups: dupes.length });
+    });
+
+    // ─── Playlist export (M3U) ─────────────────────────────────────────────
+    app.get('/api/playlists/:id/export.m3u', (req, res) => {
+      const pl = playlists.find(p => p.id === req.params.id);
+      if (!pl) return res.status(404).json({ error: 'Playlist not found' });
+      const ids = playlistLib.resolvePlaylistTracks(pl, library);
+      const lines = ['#EXTM3U', `#PLAYLIST:${pl.name || 'Playlist'}`];
+      for (const id of ids) {
+        const t = library[id];
+        if (!t) continue;
+        const dur = Math.round(t.duration || 0);
+        lines.push(`#EXTINF:${dur},${t.artist || 'Unknown'} - ${t.title || t.filename || 'Track'}`);
+        // Stream URL relative to the server — so that other LAN clients can
+        // play through the M3U without needing the original file paths.
+        lines.push(`/api/stream/${id}`);
+      }
+      const safe = (pl.name || 'playlist').replace(/[^\w\d\-]+/g, '_');
+      res.set('Content-Type', 'audio/x-mpegurl');
+      res.set('Content-Disposition', `attachment; filename="${safe}.m3u"`);
+      res.send(lines.join('\n') + '\n');
+    });
+
+    // ─── Tag editing (stub) ─────────────────────────────────────────────────
+    // Writing back ID3/Vorbis comments needs a write-capable tag library
+    // (e.g. node-id3 for MP3, others for FLAC). Not yet wired — endpoint is
+    // here so the UI can detect support and mark the field read-only meanwhile.
+    app.put('/api/tracks/:id/tags', (req, res) => {
+      res.status(501).json({
+        error: 'Tag editing not yet implemented',
+        hint: 'requires a write-capable tag library; see Phase 6 in TODO.md',
+      });
+    });
+
+    // ─── Duplicate cleanup helper (preview only — never deletes files) ─────
+    // Returns which files we'd remove to dedupe, but the actual unlink is
+    // done by the user after confirmation in the UI.
+    app.get('/api/duplicates/preview', (req, res) => {
+      // Same logic as /api/duplicates but flagged with a "keeper" — by
+      // default the smallest id wins (stable across rescans).
+      const buckets = new Map();
+      for (let i = 0; i < library.length; i++) {
+        const t = library[i];
+        if (!t) continue;
+        const key = [
+          (t.title || '').trim().toLowerCase(),
+          (t.artist || '').trim().toLowerCase(),
+          Math.round(t.duration || 0),
+        ].join('|');
+        if (key.startsWith('||')) continue;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(t);
+      }
+      const groups = [];
+      for (const arr of buckets.values()) {
+        if (arr.length <= 1) continue;
+        const sorted = [...arr].sort((a, b) => a.id - b.id);
+        groups.push({
+          keep: { id: sorted[0].id, title: sorted[0].title, artist: sorted[0].artist },
+          remove: sorted.slice(1).map(t => ({
+            id: t.id, title: t.title, artist: t.artist, filename: t.filename,
+          })),
+        });
+      }
+      res.json({ groups });
+    });
+
     // Theme (for mobile to sync accent color)
     app.get('/api/config/theme', (req, res) => {
       res.json({ hue: config.hue || 38 });
@@ -884,7 +1169,19 @@ function startServer(port) {
     // Users endpoint (must be before catch-all)
     var connectedUsers = new Map();
     var userCounter = 0;
+    // uniqueIps tracks distinct devices for stats. Capped to avoid unbounded
+    // growth on long uptimes (rare but possible on always-on servers).
+    var MAX_UNIQUE_IPS = 1000;
     var uniqueIps = new Set();
+    function trackUniqueIp(ip) {
+      if (!ip) return;
+      if (uniqueIps.size >= MAX_UNIQUE_IPS) {
+        // FIFO drop: remove the oldest entry (Sets preserve insertion order)
+        const first = uniqueIps.values().next().value;
+        if (first !== undefined) uniqueIps.delete(first);
+      }
+      uniqueIps.add(ip);
+    }
     var serverStartTime = Date.now();
 
     app.get('/api/users', (req, res) => {
@@ -903,19 +1200,25 @@ function startServer(port) {
     });
 
     // Catch-all: serve SPA
-    app.get('*', (req, res) => {
+    // Express 5 / path-to-regexp v6 dropped the bare '*' pattern, so we use
+    // a path-less middleware here. It runs only when no earlier route handled
+    // the request, keeping the same SPA fallback semantics.
+    app.use((req, res, next) => {
+      if (req.method !== 'GET') return next();
       if (req.path.startsWith('/api/')) {
         return res.status(404).json({ error: 'Not found' });
       }
       res.sendFile(path.join(__dirname, 'public', 'index.html'));
     });
 
-    // Start listening — bind to LAN or localhost based on config
-    const usePort = port || config.port || 3000;
+    // Start listening — bind to LAN or localhost based on config.
+    // port === 0 means "let the OS pick" (used in tests).
+    const usePort = (port === 0) ? 0 : (port || config.port || 3000);
     const bindAddr = config.lanEnabled === false ? '127.0.0.1' : '0.0.0.0';
     serverInstance = app.listen(usePort, bindAddr, () => {
       const lanIp = getLanIp();
-      console.log(`Ghetto Blaster server started on ${bindAddr}:${usePort} (LAN: ${bindAddr === '0.0.0.0' ? 'ON' : 'OFF'})`);
+      const actualPort = serverInstance.address().port;
+      console.log(`Ghetto Blaster server started on ${bindAddr}:${actualPort} (LAN: ${bindAddr === '0.0.0.0' ? 'ON' : 'OFF'})`);
 
       // WebSocket + connected users tracking
       wssInstance = new WebSocketServer({ server: serverInstance, maxPayload: 2048 });
@@ -935,14 +1238,15 @@ function startServer(port) {
             return;
           }
         }
-        if (clients.size >= 20) {
+        const maxConns = (config && config.maxConnections) || 20;
+        if (clients.size >= maxConns) {
           ws.close(1013, 'Too many connections');
           return;
         }
         clients.add(ws);
         userCounter++;
         const userId = 'user-' + userCounter;
-        uniqueIps.add(ip);
+        trackUniqueIp(ip);
         connectedUsers.set(ws, { id: userId, name: 'Device ' + userCounter, ip: ip, connectedAt: new Date().toISOString() });
 
         ws.send(JSON.stringify({ type: 'state', data: getState() }));
@@ -967,40 +1271,76 @@ function startServer(port) {
         scanFolders().catch(console.error);
       }
 
-      // File watcher — only react to actual file additions/deletions (rename events)
+      // File watcher — react to actual file additions/deletions only.
+      // Chokidar is preferred: fs.watch's recursive mode misses events on
+      // Windows in deep trees and can spam during big copy operations.
       if (config.watchForChanges) {
         let rescanTimeout = null;
         let lastScanTime = Date.now();
-        for (const folder of config.musicFolders) {
-          const resolved = path.resolve(folder);
-          if (!fs.existsSync(resolved)) continue;
+        const excl = new Set((config.excludeFolders || []).map(f => f.toLowerCase()));
+
+        function isAudioPath(p) {
+          return AUDIO_EXTENSIONS.has(path.extname(p).toLowerCase());
+        }
+        function isExcluded(p) {
+          const parts = p.split(/[\\/]/);
+          return parts.some(part => excl.has(part.toLowerCase()));
+        }
+        function scheduleRescan(reason) {
+          if (Date.now() - lastScanTime < 30000) return;
+          clearTimeout(rescanTimeout);
+          rescanTimeout = setTimeout(async () => {
+            console.log(`File ${reason}, rescanning...`);
+            lastScanTime = Date.now();
+            await scanFolders();
+            broadcast({ type: 'library-updated', data: { count: trackCount() } });
+          }, 5000);
+        }
+
+        const folders = (config.musicFolders || [])
+          .map(f => path.resolve(f))
+          .filter(p => fs.existsSync(p));
+
+        if (chokidar && folders.length > 0) {
           try {
-            fs.watch(resolved, { recursive: true }, (eventType, filename) => {
-              // Only react to 'rename' events (file added/removed), not 'change' (metadata/content edits)
-              if (eventType !== 'rename') return;
-              if (!filename) return;
-              const ext = path.extname(filename).toLowerCase();
-              if (!AUDIO_EXTENSIONS.has(ext)) return;
-              const parts = filename.split(path.sep);
-              const excl = new Set((config.excludeFolders || []).map(f => f.toLowerCase()));
-              if (parts.some(p => excl.has(p.toLowerCase()))) return;
-              // Don't rescan if we scanned less than 30s ago (avoids cascade)
-              if (Date.now() - lastScanTime < 30000) return;
-              clearTimeout(rescanTimeout);
-              rescanTimeout = setTimeout(async () => {
-                console.log('File added/removed, rescanning...');
-                lastScanTime = Date.now();
-                await scanFolders();
-                broadcast({ type: 'library-updated', data: { count: trackCount() } });
-              }, 5000);
+            watcherInstance = chokidar.watch(folders, {
+              ignoreInitial: true,
+              persistent: true,
+              awaitWriteFinish: { stabilityThreshold: 1500, pollInterval: 200 },
+              ignored: (p) => {
+                if (!p) return false;
+                const parts = p.split(/[\\/]/);
+                return parts.some(part => excl.has(part.toLowerCase()));
+              },
+              depth: 99,
             });
+            watcherInstance.on('add', (p) => { if (isAudioPath(p)) scheduleRescan('added'); });
+            watcherInstance.on('unlink', (p) => { if (isAudioPath(p)) scheduleRescan('removed'); });
+            watcherInstance.on('error', (err) => console.warn('Watcher error:', err.message));
           } catch (e) {
-            console.warn(`Could not watch: ${resolved}`, e.message);
+            console.warn('Chokidar failed, falling back to fs.watch:', e.message);
+            watcherInstance = null;
+          }
+        }
+
+        if (!watcherInstance) {
+          // Fallback: native fs.watch (works fine on macOS/Linux, flaky on Windows)
+          for (const resolved of folders) {
+            try {
+              fs.watch(resolved, { recursive: true }, (eventType, filename) => {
+                if (eventType !== 'rename' || !filename) return;
+                if (!isAudioPath(filename)) return;
+                if (isExcluded(filename)) return;
+                scheduleRescan(eventType);
+              });
+            } catch (e) {
+              console.warn(`Could not watch: ${resolved}`, e.message);
+            }
           }
         }
       }
 
-      resolve({ ip: lanIp, port: usePort });
+      resolve({ ip: lanIp, port: actualPort });
     });
 
     serverInstance.on('error', (err) => {
@@ -1022,6 +1362,16 @@ function stopServer() {
     if (wssInstance) {
       wssInstance.close();
       wssInstance = null;
+    }
+
+    if (watcherInstance) {
+      try { watcherInstance.close(); } catch (e) { /* ignore */ }
+      watcherInstance = null;
+    }
+
+    if (scannerPool) {
+      scannerPool.stop().catch(() => {});
+      scannerPool = null;
     }
 
     if (serverInstance) {
