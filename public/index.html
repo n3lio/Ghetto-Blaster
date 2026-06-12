@@ -339,86 +339,138 @@
     <h3>Settings <button class="modal-close" id="settingsClose">&times;</button></h3>
     <div class="modal-body">
 
+    <!-- ─── Library ──────────────────────────────────────────────────── -->
     <div class="settings-section">
-      <h4>Music Folders</h4>
+      <h4>Library</h4>
+      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Music folders</label>
       <div class="folder-list" id="folderList"></div>
-      <button class="add-folder-btn" id="addFolderBtn">+ Add Folder</button>
+      <button class="add-folder-btn" id="addFolderBtn">+ Add folder</button>
     </div>
 
-    <div class="settings-section">
-      <h4>Visualizer</h4>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;">
-        <input type="checkbox" id="settingsVizEnabled" checked style="width:16px;height:16px;accent-color:var(--accent);">
-        <span>Show visualizer</span>
-      </label>
-      <label>Style</label>
-      <select id="settingsVizMode" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);font-size:0.83rem;">
-        <option value="nebula">Nebula</option>
-        <option value="glow">Glow</option>
-        <option value="drift">Drift</option>
-        <option value="wave">Wave</option>
-        <option value="starfield">Starfield</option>
-        <option value="bars">Bars</option>
-        <option value="spectrum">Spectrum</option>
-        <option value="circular">Circular</option>
-        <option value="text">Text</option>
-      </select>
-      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-top:10px;">Color mode</label>
-      <select id="settingsVizColor" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);font-size:0.83rem;margin-top:4px;">
-        <option value="theme">Theme (auto)</option>
-        <option value="cover">Cover</option>
-      </select>
-    </div>
-
+    <!-- ─── Playback ────────────────────────────────────────────────── -->
     <div class="settings-section">
       <h4>Playback</h4>
-      <label>Audio output</label>
-      <select id="settingsAudioOutput" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);font-size:0.83rem;margin-bottom:10px;">
+      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">Audio output</label>
+      <select id="settingsAudioOutput" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);font-size:0.83rem;margin-bottom:14px;">
         <option value="">Default</option>
       </select>
+
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
         <input type="checkbox" id="settingsCrossfade" style="width:16px;height:16px;accent-color:var(--accent);">
         <span>Crossfade between tracks</span>
       </label>
-      <div id="crossfadeDuration" style="margin-top:8px;display:none;">
-        <label>Duration: <span id="crossfadeVal">3</span>s</label>
+      <div id="crossfadeDuration" style="margin-top:8px;margin-left:24px;display:none;">
+        <label style="font-size:0.74rem;color:var(--text-dim);">Duration: <span id="crossfadeVal">3</span>s</label>
         <input type="range" id="settingsCrossfadeDur" min="1" max="8" value="3" style="width:100%;margin-top:4px;">
       </div>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:10px;">
+
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:12px;">
         <input type="checkbox" id="settingsGapless" style="width:16px;height:16px;accent-color:var(--accent);">
-        <span>Gapless playback (preload next track)</span>
+        <span>Gapless playback</span>
       </label>
-      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0 24px;">Best for live albums, DJ sets — no silence between tracks. Disabled while crossfade is on.</p>
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 14px 24px;">Preloads the next track. Best for live albums and DJ sets. Disabled while crossfade is on.</p>
+
+      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Sleep timer</label>
+      <div class="sleep-timer-row">
+        <button class="sleep-preset" data-min="30">30 min</button>
+        <button class="sleep-preset" data-min="60">1 h</button>
+        <button class="sleep-preset" data-min="120">2 h</button>
+        <label class="sleep-custom-wrap">
+          <span class="sleep-custom-label">Custom</span>
+          <input type="number" min="1" max="1440" id="sleepCustomMin" placeholder="—">
+          <span class="sleep-custom-unit">min</span>
+        </label>
+        <button id="sleepCancelBtn" class="sleep-cancel">Cancel</button>
+      </div>
+      <p id="sleepTimerStatus" style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 0;">No timer set</p>
     </div>
 
+    <!-- ─── Appearance ──────────────────────────────────────────────── -->
     <div class="settings-section">
-      <h4>Theme</h4>
-      <label>Accent color</label>
-      <input type="range" id="settingsHue" min="0" max="360" value="38" style="width:100%;height:8px;-webkit-appearance:none;appearance:none;border-radius:4px;background:linear-gradient(to right,hsl(0,80%,55%),hsl(60,80%,55%),hsl(120,80%,55%),hsl(180,80%,55%),hsl(240,80%,55%),hsl(300,80%,55%),hsl(360,80%,55%));outline:none;cursor:pointer;">
+      <h4>Appearance</h4>
+
+      <div class="settings-row-inline">
+        <label class="settings-row-label">Theme</label>
+        <select id="settingsThemeMode" class="settings-row-input">
+          <option value="auto">Auto (follow OS)</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
+
+      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-top:14px;margin-bottom:6px;">Accent color</label>
+      <input type="range" id="settingsHue" min="0" max="360" value="0" style="width:100%;height:8px;-webkit-appearance:none;appearance:none;border-radius:4px;background:linear-gradient(to right,hsl(0,80%,55%),hsl(60,80%,55%),hsl(120,80%,55%),hsl(180,80%,55%),hsl(240,80%,55%),hsl(300,80%,55%),hsl(360,80%,55%));outline:none;cursor:pointer;">
       <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.68rem;color:var(--text-dim);"><span>Red</span><span>Amber</span><span>Green</span><span>Blue</span><span>Purple</span></div>
+
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:14px;">
+        <input type="checkbox" id="settingsVizEnabled" checked style="width:16px;height:16px;accent-color:var(--accent);">
+        <span>Show visualizer</span>
+      </label>
+      <div class="settings-row-inline" style="margin-top:8px;">
+        <label class="settings-row-label">Style</label>
+        <select id="settingsVizMode" class="settings-row-input">
+          <option value="nebula">Nebula</option>
+          <option value="glow">Glow</option>
+          <option value="drift">Drift</option>
+          <option value="wave">Wave</option>
+          <option value="starfield">Starfield</option>
+          <option value="bars">Bars</option>
+          <option value="spectrum">Spectrum</option>
+          <option value="circular">Circular</option>
+          <option value="text">Text</option>
+        </select>
+      </div>
+      <div class="settings-row-inline" style="margin-top:8px;">
+        <label class="settings-row-label">Color mode</label>
+        <select id="settingsVizColor" class="settings-row-input">
+          <option value="theme">Theme (auto)</option>
+          <option value="cover">Cover</option>
+        </select>
+      </div>
     </div>
 
+    <!-- ─── Sharing & Network ───────────────────────────────────────── -->
     <div class="settings-section">
-      <h4>Network</h4>
+      <h4>Sharing &amp; Network</h4>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
         <input type="checkbox" id="settingsLanEnabled" checked style="width:16px;height:16px;accent-color:var(--accent);">
-        <span>LAN Server (allow other devices to connect)</span>
+        <span>LAN server (allow other devices to connect)</span>
       </label>
-      <p style="font-size:0.7rem;color:var(--text-dim);margin-top:6px;">Disable to use Ghetto Blaster as a standalone player only. Requires restart.</p>
-    </div>
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 14px 24px;">Disable to use Ghetto Blaster as a standalone player only. Requires restart.</p>
 
-    <div class="settings-section">
-      <h4>Mobile Access</h4>
+      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Mobile access</label>
       <div id="qrSection">
-        <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px;" id="qrLabel">Scan from your phone to open Ghetto Blaster</p>
+        <p style="font-size:0.7rem;color:var(--text-dim);margin:0 0 8px;" id="qrLabel">Scan with your phone to open Ghetto Blaster</p>
         <div id="qrCode" style="display:flex;justify-content:center;padding:12px;background:#fff;border-radius:var(--radius);width:fit-content;margin:0 auto;"></div>
         <p style="font-size:0.72rem;color:var(--text-dim);text-align:center;margin-top:8px;" id="qrUrl"></p>
         <button class="add-folder-btn" id="downloadQrBtn" style="margin-top:8px;">Download QR as PNG</button>
       </div>
     </div>
 
+    <!-- ─── Data ────────────────────────────────────────────────────── -->
     <div class="settings-section">
-      <h4>Keyboard Shortcuts</h4>
+      <h4>Data &amp; Backups</h4>
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:0 0 10px;">Daily snapshot of your playlists, history, favorites and config (kept 7 days).</p>
+      <div class="backups-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button id="backupNowBtn">Snapshot now</button>
+        <button id="backupRefreshBtn">Refresh list</button>
+      </div>
+      <div id="backupsList" class="backups-list"></div>
+    </div>
+
+    <!-- ─── About ──────────────────────────────────────────────────── -->
+    <div class="settings-section" id="settingsUpdatesSection">
+      <h4>About</h4>
+      <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:0.82rem;color:var(--text);font-weight:500;" id="settingsVersionLabel">v—</span>
+          <span id="settingsUpdateStatus" style="font-size:0.68rem;padding:4px 10px;border-radius:12px;border:1px solid var(--border);color:var(--text-dim);font-weight:500;transition:all 0.3s;"></span>
+        </div>
+        <a href="https://github.com/n3lio/Ghetto-Blaster/releases" target="_blank" rel="noopener" class="settings-link-btn">GitHub Releases ↗</a>
+      </div>
+      <button id="settingsCheckUpdate" class="add-folder-btn" style="margin-top:0;margin-bottom:14px;">Check for updates</button>
+
+      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Keyboard shortcuts</label>
       <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:0.75rem;">
         <kbd>Space</kbd><span style="color:var(--text-muted);">Play / Pause</span>
         <kbd>&rarr;</kbd><span style="color:var(--text-muted);">Next track</span>
@@ -427,25 +479,11 @@
       </div>
     </div>
 
-    <div class="settings-section" id="settingsUpdatesSection">
-      <h4>Updates</h4>
-      <!-- Two-column layout: version + status pill on the left, links on
-           the right. The 'Check for updates' button moves below as a full-
-           width action so it's discoverable even when the version line is
-           tight. -->
-      <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:0.82rem;color:var(--text);font-weight:500;" id="settingsVersionLabel">v—</span>
-          <span id="settingsUpdateStatus" style="font-size:0.68rem;padding:4px 10px;border-radius:12px;border:1px solid var(--border);color:var(--text-dim);font-weight:500;transition:all 0.3s;"></span>
-        </div>
-        <a href="https://github.com/n3lio/Ghetto-Blaster/releases" target="_blank" rel="noopener" class="settings-link-btn">GitHub Releases ↗</a>
-      </div>
-      <button id="settingsCheckUpdate" class="add-folder-btn" style="margin-top:0;">Check for updates</button>
-    </div>
-
-    <!-- v3.14 add-ons (theme / sleep timer / backups). Filled by runtime.js
-         so we don't disturb the legacy settings layout above. -->
-    <div id="settingsExtras"></div>
+    <!-- runtime.js used to inject theme / sleep timer / backups here in
+         a separate floating block; now those controls live inline above
+         in the right sections, so this stays empty (kept around in case
+         a future extension wants to plug something in). -->
+    <div id="settingsExtras" style="display:none;"></div>
 
     </div><!-- end modal-body -->
     <div class="modal-actions">

@@ -1690,61 +1690,27 @@ if ('serviceWorker' in navigator && !window.resonance) {
   });
 })();
 
-// ─── Settings extras (v3.14): theme, sleep timer, backups, radio button ────
-// All injected lazily into #settingsExtras the first time the modal opens,
-// so we don't have to touch the legacy settings markup. Each section is
-// independent and degrades gracefully if its endpoint is missing.
+// ─── Settings extras wiring (v3.14 / v3.15.11) ─────────────────────────────
+// Theme select, sleep timer, and backups list are now inline in index.html
+// (under their logical sections: Appearance / Playback / Data). This module
+// only wires the listeners; the markup lives in index.html so we don't have
+// to fight ordering / styling against the rest of the modal anymore.
 (function setupSettingsExtras() {
   if (typeof document === 'undefined') return;
   var settingsBtn = document.getElementById('settingsBtn');
-  var extras = document.getElementById('settingsExtras');
-  if (!settingsBtn || !extras) return;
-  var injected = false;
+  if (!settingsBtn) return;
+  var bound = false;
 
-  function injectMarkup() {
-    if (injected) return;
-    injected = true;
-    extras.innerHTML = ''
-      + '<div class="settings-section"><h3>Theme</h3>'
-      +   '<div class="settings-row">'
-      +     '<label>Mode</label>'
-      +     '<select id="settingsThemeMode">'
-      +       '<option value="auto">Auto (follow OS)</option>'
-      +       '<option value="dark">Dark</option>'
-      +       '<option value="light">Light</option>'
-      +     '</select>'
-      +   '</div>'
-      + '</div>'
-      + '<div class="settings-section"><h3>Sleep timer</h3>'
-      +   '<div class="sleep-timer-row">'
-      +     '<button class="sleep-preset" data-min="30">30 min</button>'
-      +     '<button class="sleep-preset" data-min="60">1 h</button>'
-      +     '<button class="sleep-preset" data-min="120">2 h</button>'
-      +     '<label class="sleep-custom-wrap">'
-      +       '<span class="sleep-custom-label">Custom</span>'
-      +       '<input type="number" min="1" max="1440" id="sleepCustomMin" placeholder="—">'
-      +       '<span class="sleep-custom-unit">min</span>'
-      +     '</label>'
-      +     '<button id="sleepCancelBtn" class="sleep-cancel">Cancel</button>'
-      +   '</div>'
-      +   '<p id="sleepTimerStatus" class="settings-hint">No timer set</p>'
-      + '</div>'
-      + '<div class="settings-section"><h3>Backups</h3>'
-      +   '<p class="settings-hint" style="margin-bottom:12px;">Daily snapshot of your playlists, history, favorites and config (kept 7 days).</p>'
-      +   '<div class="backups-actions" style="margin-bottom:12px;">'
-      +     '<button id="backupNowBtn">Snapshot now</button>'
-      +     '<button id="backupRefreshBtn">Refresh list</button>'
-      +   '</div>'
-      +   '<div id="backupsList" class="backups-list"></div>'
-      + '</div>';
-
+  function bindOnce() {
+    if (bound) return;
+    bound = true;
     bindTheme();
     bindSleepTimer();
     bindBackups();
   }
 
   settingsBtn.addEventListener('click', function() {
-    injectMarkup();
+    bindOnce();
     refreshSleepStatus();
     refreshBackups();
     syncTheme();

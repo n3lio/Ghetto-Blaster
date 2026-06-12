@@ -1733,3 +1733,88 @@ html[data-theme="auto"] #aboutModal .about-card * {
   animation: gb-spin 0.9s linear infinite;
 }
 @keyframes gb-spin { to { transform: rotate(360deg); } }
+
+/* ─── v3.15.11 Settings layout — inline label + input row ───────────── */
+.settings-row-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-row-inline .settings-row-label {
+  flex: 0 0 90px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.settings-row-inline .settings-row-input {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.83rem;
+}
+.settings-row-inline .settings-row-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Backup row buttons + restore button — match the rest of the modal. */
+#backupsList {
+  max-height: 220px;
+  overflow-y: auto;
+}
+.backup-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.backup-row:last-child { border-bottom: none; }
+.backup-date { font-family: ui-monospace, monospace; }
+.backup-files { flex: 1; color: var(--text-dim); font-size: 0.78rem; }
+.backup-restore {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+}
+.backup-restore:hover { background: var(--accent-subtle); }
+.backups-actions button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 0.83rem;
+  cursor: pointer;
+}
+.backups-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-hover);
+}
+
+/* Sleep preset / cancel buttons (now inline in Playback section) */
+.sleep-preset, .sleep-cancel {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.83rem;
+  cursor: pointer;
+}
+.sleep-preset:hover, .sleep-cancel:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.sleep-cancel { color: var(--text-dim); }
