@@ -43,8 +43,8 @@
 
 - [ ] **Code-signing Windows** *(P1)* — décision en suspens (cf. `docs/RELEASING.md`). Certificat EV ou OV (~80–500 USD/an).
 - [x] ~~**CI/CD release auto**~~ *(P1)* — `build.yml` lance test → build → upload sur tag `v*`.
-- [ ] **macOS build** *(P3)* — `electron-builder --mac` (DMG, signature/notarization Apple).
-- [ ] **Linux build** *(P3)* — AppImage + .deb.
+- [~] **macOS build** *(P3)* — config DMG x64+arm64 dans `package.json`, `npm run build:mac`. Notarization Apple reste à wirer si on signe.
+- [~] **Linux build** *(P3)* — config AppImage + .deb x64, `npm run build:linux`. CI matrix non-Windows à ajouter quand on voudra ship multi-OS.
 - [x] ~~**icon.ico manquant**~~ *(P2)* — généré multi-résolutions (16/32/48/64/128/256), `build.win.icon` pointe dessus.
 - [x] ~~**Changelog automatisé**~~ *(P2)* — généré dans le release workflow à partir du git log entre tags.
 - [x] ~~**Page release GitHub avec notes formatées**~~ *(P2)* — template avec sections Download / What's new / changelog auto.
@@ -54,7 +54,7 @@
 - [ ] **Screenshots/GIFs dans README** *(P1)* — il manque les visuels (logo, player, viz, mobile remote, settings). Texte fait, illustrations à ajouter.
 - [x] ~~**Section Architecture dans le README**~~ *(P2)* — diagramme ASCII Electron ↔ server ↔ WS ↔ mobile.
 - [x] ~~**Doc des raccourcis clavier**~~ *(P2)* — table dans le README.
-- [ ] **CONTRIBUTING.md** *(P3)* — au cas où.
+- [x] ~~**CONTRIBUTING.md**~~ *(P3)* — guide setup/workflow/release référant CLAUDE.md et docs/.
 - [x] ~~**Doc API REST**~~ *(P2)* — `docs/API.md`.
 - [x] ~~**CLAUDE.md / agent context**~~ *(P2)* — `CLAUDE.md` à la racine.
 
@@ -65,8 +65,8 @@
 - [x] ~~**Égaliseur : sauvegarder le preset utilisateur**~~ *(P2)* — `_appConfig.eqPreset`, restauré au boot, sauvé à chaque change.
 - [ ] **Pitch / speed control** *(P3)* — utile pour DJ.
 - [x] ~~**ReplayGain / normalisation volume**~~ *(P2)* — extracteur `track.replayGain` (dB) côté serveur, factor multiplicatif sur audio.volume côté renderer (capé à 1 pour éviter clipping).
-- [ ] **Sleep timer** *(P3)*.
-- [ ] **Mode "radio"** *(P3)* — auto-queue similaire à la track en cours (genre, artiste).
+- [x] ~~**Sleep timer**~~ *(P3)* — `POST /api/sleep-timer {minutes}` arme un timer côté serveur qui broadcast `pause` après. GET pour status, DELETE pour annuler.
+- [x] ~~**Mode "radio"**~~ *(P3)* — `lib/radio.js` scoring (artist+5, genre+3, year±5+1, albumArtist+1) + jitter. Endpoints `GET /api/radio/seed?trackId` et `POST /api/radio/play`.
 - [x] ~~**Lyrics auto-fetch**~~ *(P2)* — `GET /api/tracks/:id/lyrics` via `lib/lyrics.js`. Resolution: sidecar .lrc → `userData/lyrics-cache/<id>.{lrc,txt}` → lyrics.ovh public API. Cache automatique des hits online. Memo LRU 500 entrées.
 - [x] ~~**Synchro lyrics avec position**~~ *(P2)* — parser LRC dans `lib/lyrics.js` retourne `{lines: [{time, text}]}` quand timestamps présents. UI sync reste à câbler côté renderer.
 

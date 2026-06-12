@@ -18,6 +18,7 @@ const m3u = require('./lib/m3u');
 const tagWriter = require('./lib/tag-writer');
 const lyricsLib = require('./lib/lyrics');
 const multitag = require('./lib/multitag');
+const radio = require('./lib/radio');
 let backupTimer = null;
 let log = getLogger();
 let scannerPool = null;
@@ -1458,6 +1459,88 @@ function startServer(port) {
         playlist: { id: playlist.id, name: playlist.name, trackCount: matched.length },
         unresolved: unresolved.slice(0, 50),
         unresolvedTotal: unresolved.length,
+      });
+    });
+
+    // ─── Radio mode ────────────────────────────────────────────────────────
+    // Build a "radio" queue around a seed track. Cheap heuristic in
+    // lib/radio.js — same genre/artist/year-bucket score; no external API.
+    app.get('/api/radio/seed', (req, res) => {
+      const seedId = parseInt(req.query.trackId, 10);
+      if (!Number.isInteger(seedId)) return res.status(400).json({ error: 'trackId required' });
+      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+      const ids = radio.buildRadioQueue(seedId, library, { limit });
+      if (ids.length === 0) return res.status(404).json({ error: 'Seed track not in library' });
+      res.json({
+        seed: ids[0],
+        ids,
+        tracks: ids.map(id => library[id]).filter(Boolean).map(({ path: _, ...rest }) => rest),
+      });
+    });
+
+    app.post('/api/radio/play', (req, res) => {
+      const body = req.body || {};
+      const seedId = parseInt(body.trackId, 10);
+      if (!Number.isInteger(seedId)) return res.status(400).json({ error: 'trackId required' });
+      const limit = Math.min(parseInt(body.limit, 10) || 50, 200);
+      const ids = radio.buildRadioQueue(seedId, library, { limit });
+      if (ids.length === 0) return res.status(404).json({ error: 'Seed track not in library' });
+      queue = ids;
+      currentIndex = 0;
+      isPlaying = true;
+      log.info('radio queue built', { seed: seedId, length: queue.length });
+      broadcast({ type: 'state', data: getState() });
+      res.json({ ok: true, length: queue.length });
+    });
+
+    // ─── Sleep timer ───────────────────────────────────────────────────────
+    // Server-side timer that fires a `pause` remote command after N minutes.
+    // The desktop renderer listens on the WS for remote:command, just like
+    // mobile-triggered actions. Cancellation is idempotent.
+    let sleepTimerId = null;
+    let sleepTimerEndsAt = 0;
+
+    function clearSleepTimer() {
+      if (sleepTimerId) clearTimeout(sleepTimerId);
+      sleepTimerId = null;
+      sleepTimerEndsAt = 0;
+    }
+
+    app.post('/api/sleep-timer', (req, res) => {
+      const body = req.body || {};
+      const minutes = parseFloat(body.minutes);
+      if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 24 * 60) {
+        return res.status(400).json({ error: 'minutes must be a positive number ≤ 1440' });
+      }
+      clearSleepTimer();
+      const ms = minutes * 60 * 1000;
+      sleepTimerEndsAt = Date.now() + ms;
+      sleepTimerId = setTimeout(() => {
+        log.info('sleep timer fired — pausing');
+        broadcast({ type: 'remote:command', data: { command: 'pause' } });
+        sleepTimerId = null;
+        sleepTimerEndsAt = 0;
+        broadcast({ type: 'sleep-timer', data: { active: false, endsAt: 0 } });
+      }, ms);
+      // Don't keep the process alive on quit.
+      if (sleepTimerId && typeof sleepTimerId.unref === 'function') sleepTimerId.unref();
+      log.info('sleep timer set', { minutes });
+      broadcast({ type: 'sleep-timer', data: { active: true, endsAt: sleepTimerEndsAt } });
+      res.json({ ok: true, endsAt: sleepTimerEndsAt });
+    });
+
+    app.delete('/api/sleep-timer', (req, res) => {
+      clearSleepTimer();
+      log.info('sleep timer cancelled');
+      broadcast({ type: 'sleep-timer', data: { active: false, endsAt: 0 } });
+      res.json({ ok: true });
+    });
+
+    app.get('/api/sleep-timer', (req, res) => {
+      res.json({
+        active: sleepTimerId != null,
+        endsAt: sleepTimerEndsAt,
+        msRemaining: sleepTimerEndsAt > 0 ? Math.max(0, sleepTimerEndsAt - Date.now()) : 0,
       });
     });
 
