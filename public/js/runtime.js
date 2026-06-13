@@ -670,6 +670,14 @@ if ('serviceWorker' in navigator && !window.resonance) {
     if (window.resonance && window.resonance.setConfig) {
       window.resonance.setConfig({ theme: mode });
     }
+    // Theme flip changes --bg, which the visualizer samples for its
+    // per-frame fade. Invalidate the cache + force a resize so the canvas
+    // picks up the new background immediately (otherwise the canvas can
+    // sit on the previous theme's fade until a track change).
+    if (window.viz) {
+      try { window.viz._themeBgCache = null; } catch (e) {}
+      try { window.viz.resize && window.viz.resize(); } catch (e) {}
+    }
   };
   // Re-apply on OS theme change while in auto mode.
   if (window.matchMedia) {
@@ -1605,6 +1613,54 @@ if ('serviceWorker' in navigator && !window.resonance) {
     // assume the library now reflects what's on disk. Reset badge text.
     badge.textContent = 'Library outdated · Scan';
   }, 4000);
+})();
+
+// ─── Now Playing collapse — full-height queue mode (v3.15.13) ─────────────
+// User can hide the cover + visualizer + track-info row to get the queue
+// list at full panel height. State persists in _appConfig.npCollapsed and
+// is restored on boot. Toggle lives in the queue header next to Shuffle /
+// Clear because that's where the user's already looking when they want
+// more queue room.
+(function setupNpCollapse() {
+  if (typeof document === 'undefined') return;
+  var btn = document.getElementById('toggleNpRow');
+  var panel = document.getElementById('panel-nowplaying');
+  if (!btn || !panel) return;
+
+  function apply(collapsed) {
+    panel.classList.toggle('np-collapsed', !!collapsed);
+    btn.classList.toggle('active', !!collapsed);
+    var label = btn.querySelector('.np-toggle-label');
+    if (label) label.textContent = collapsed ? 'Expanded' : 'Compact';
+    btn.title = collapsed
+      ? 'Show cover and visualizer'
+      : 'Hide cover and visualizer to give the queue full height';
+    // Visualizer canvas needs a resize when its container snaps in/out.
+    if (window.viz) {
+      try { window.viz._themeBgCache = null; } catch (e) {}
+      try { window.viz.resize && window.viz.resize(); } catch (e) {}
+    }
+  }
+
+  btn.addEventListener('click', function() {
+    var next = !panel.classList.contains('np-collapsed');
+    apply(next);
+    var cfg = window._appConfig = window._appConfig || {};
+    cfg.npCollapsed = next;
+    if (window.resonance && window.resonance.setConfig) {
+      window.resonance.setConfig({ npCollapsed: next });
+    }
+  });
+
+  // Restore on boot once the saved config is in.
+  var tries = 0;
+  var iv = setInterval(function() {
+    tries++;
+    if (window._appConfig || tries > 40) {
+      clearInterval(iv);
+      apply(!!(window._appConfig && window._appConfig.npCollapsed));
+    }
+  }, 250);
 })();
 
 // ─── Volume persistence across track changes (v3.15.5) ────────────────────

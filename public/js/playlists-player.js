@@ -41,14 +41,30 @@ function getPlaylistColor(pl, index) {
 function renderPlaylists() {
   var view = document.getElementById('playlistsView');
   document.getElementById('playlistCount').textContent = playlists.length + ' playlist' + (playlists.length !== 1 ? 's' : '');
-  if (!playlists.length) { view.innerHTML = '<p style="color:var(--text-muted);font-size:0.83rem;">No playlists yet.</p>'; return; }
-  view.innerHTML = playlists.map(function(p, i) {
-    var color = getPlaylistColor(p, i);
-    var icon = '<div style="width:40px;height:40px;border-radius:8px;background:' + color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem;font-weight:700;color:#0a0a0b;">' + esc(p.name.charAt(0).toUpperCase()) + '</div>';
-    return '<div class="playlist-card" draggable="true" data-id="' + p.id + '" data-idx="' + i + '">' + icon +
-      '<div style="flex:1;min-width:0;margin-left:12px;"><div class="pl-name">' + esc(p.name) + '</div><div class="pl-count">' + p.trackCount + ' tracks</div></div>' +
-      '<div class="pl-actions"><button class="pl-btn play-pl" data-id="' + p.id + '">Play</button><button class="pl-btn edit-pl" data-id="' + p.id + '">Edit</button><button class="pl-btn del" data-id="' + p.id + '">Delete</button></div></div>';
-  }).join('');
+  // Always-on virtual 'All' playlist at the very top — accent-coloured icon,
+  // not draggable, not deletable, not editable. Click 'Play' shuffles the
+  // whole library (or hits the desktop via the remote command on mobile).
+  var totalTracks = (typeof allTracks !== 'undefined' && Array.isArray(allTracks)) ? allTracks.length : 0;
+  var allCardHtml = '<div class="playlist-card pl-all" data-id="__all__">'
+    + '<div style="width:40px;height:40px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem;font-weight:800;color:var(--bg);">★</div>'
+    + '<div style="flex:1;min-width:0;margin-left:12px;">'
+    +   '<div class="pl-name">All tracks</div>'
+    +   '<div class="pl-count">' + totalTracks + ' tracks · whole library</div>'
+    + '</div>'
+    + '<div class="pl-actions"><button class="pl-btn play-pl" data-id="__all__">Play</button></div>'
+    + '</div>';
+
+  if (!playlists.length) {
+    view.innerHTML = allCardHtml + '<p style="color:var(--text-muted);font-size:0.83rem;margin-top:14px;">No custom playlists yet.</p>';
+  } else {
+    view.innerHTML = allCardHtml + playlists.map(function(p, i) {
+      var color = getPlaylistColor(p, i);
+      var icon = '<div style="width:40px;height:40px;border-radius:8px;background:' + color + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem;font-weight:700;color:#0a0a0b;">' + esc(p.name.charAt(0).toUpperCase()) + '</div>';
+      return '<div class="playlist-card" draggable="true" data-id="' + p.id + '" data-idx="' + i + '">' + icon +
+        '<div style="flex:1;min-width:0;margin-left:12px;"><div class="pl-name">' + esc(p.name) + '</div><div class="pl-count">' + p.trackCount + ' tracks</div></div>' +
+        '<div class="pl-actions"><button class="pl-btn play-pl" data-id="' + p.id + '">Play</button><button class="pl-btn edit-pl" data-id="' + p.id + '">Edit</button><button class="pl-btn del" data-id="' + p.id + '">Delete</button></div></div>';
+    }).join('');
+  }
 
   // Drag & drop reorder
   var dragSrcIdx = null;
@@ -77,6 +93,23 @@ function renderPlaylists() {
   view.querySelectorAll('.play-pl').forEach(function(btn) {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
+      // Special handling for the virtual 'All' playlist — no server lookup,
+      // just shuffle the whole library directly.
+      if (btn.dataset.id === '__all__') {
+        if (!isDesktop && mobileMode === 'remote') {
+          sendRemoteCommand('queue-set-all');
+          document.querySelector('[data-tab="nowplaying"]').click(); scrollToCurrentInQueue();
+          return;
+        }
+        var allIds = (allTracks || []).map(function(t){ return t.id; });
+        if (!allIds.length) return;
+        queue = smartShuffle(allIds);
+        currentIndex = 0;
+        playCurrentTrack();
+        renderQueue();
+        document.querySelector('[data-tab="nowplaying"]').click(); scrollToCurrentInQueue();
+        return;
+      }
       if (!isDesktop && mobileMode === 'remote') {
         // Remote: tell desktop to play this playlist
         sendRemoteCommand('play-playlist', { playlistId: btn.dataset.id });

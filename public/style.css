@@ -305,7 +305,11 @@
     .lib-breadcrumb { font-size: 0.73rem; color: var(--text-dim); }
     /* Stats cards */
     .stat-card {
-      background: linear-gradient(135deg, var(--surface) 0%, rgba(22,21,20,0.6) 100%);
+      /* Gradient between two of the existing UI surfaces (the warm bg used
+         on header/tabs/player-bar, and the slightly lighter card surface).
+         Reads naturally in both dark and light themes — was previously
+         using a hardcoded rgba(22,21,20,…) which only worked in dark. */
+      background: linear-gradient(135deg, var(--surface) 0%, var(--bg-warm) 100%);
       border: 1px solid var(--border); border-radius: 14px; padding: 18px 16px; text-align: center;
       position: relative; overflow: hidden; transition: all 0.2s;
     }
@@ -458,7 +462,7 @@
       min-width: 80px;
       position: relative;
       border-left: 1px solid var(--border);
-      background: #0a0a0b;
+      background: var(--bg);
     }
     .np-viz-side canvas { width: 100%; height: 100%; display: block; transition: opacity 0.3s; }
     .np-viz-side:not(.active) canvas { opacity: 0; }
@@ -1818,3 +1822,84 @@ html[data-theme="auto"] #aboutModal .about-card * {
   color: var(--accent);
 }
 .sleep-cancel { color: var(--text-dim); }
+
+/* ─── v3.15.13 light mode polish ────────────────────────────────────── */
+
+/* Viz gear (the "..." button) and the menu it opens were hardcoded with
+   dark rgba backgrounds and white-ish borders. Re-derive them from the
+   theme so they don't sit as a black blob over a light viz canvas. */
+html[data-theme="light"] .viz-gear-btn,
+html[data-theme="auto"] .viz-gear-btn {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+  color: var(--text-muted) !important;
+}
+html[data-theme="light"] .viz-gear-btn:hover,
+html[data-theme="auto"] .viz-gear-btn:hover {
+  border-color: rgba(0, 0, 0, 0.35) !important;
+  color: var(--text) !important;
+}
+html[data-theme="light"] .viz-menu,
+html[data-theme="auto"] .viz-menu {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text);
+}
+
+/* Track info on the viz panel: in light mode, the track title/artist
+   were rendered with text-shadow tuned for a black canvas, which made
+   the text look smudged on a near-white canvas. Lighter shadow. */
+html[data-theme="light"] .np-track-title,
+html[data-theme="auto"] .np-track-title,
+html[data-theme="light"] .np-track-artist,
+html[data-theme="auto"] .np-track-artist,
+html[data-theme="light"] .np-track-meta,
+html[data-theme="auto"] .np-track-meta {
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.6);
+}
+/* And the mask on .np-track-info needs the new light bg to fade into. */
+html[data-theme="light"] .np-track-info,
+html[data-theme="auto"] .np-track-info {
+  mask-image: linear-gradient(180deg, transparent 0, var(--bg) 18px, var(--bg) 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, var(--bg) 18px, var(--bg) 100%);
+}
+
+/* ─── v3.15.13 Sleep timer custom field overflow ────────────────────── */
+.sleep-custom-wrap {
+  /* Was overflowing because flex children didn't respect the wrap's
+     border + padding. Force overflow:hidden + a tighter input width
+     so the 'min' suffix sits inside the same pill cleanly. */
+  overflow: hidden;
+  flex-wrap: nowrap;
+}
+.sleep-custom-wrap input[type="number"] {
+  width: 44px !important;
+}
+
+/* ─── v3.15.13 Now Playing collapse mode ────────────────────────────── */
+/* When the user wants the queue at full panel height, hide the cover +
+   viz row + the resizer. The queue list expands to fill what's left.
+   The toggle button sits in the queue header. */
+.panel#panel-nowplaying.np-collapsed .np-row,
+.panel#panel-nowplaying.np-collapsed .np-vresizer {
+  display: none !important;
+}
+.panel#panel-nowplaying.np-collapsed .queue-header {
+  flex-shrink: 0;
+}
+#toggleNpRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+#toggleNpRow.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+#toggleNpRow svg {
+  transition: transform 0.2s ease;
+}
+#toggleNpRow.active svg {
+  /* Arrow pointing down when in collapsed mode (click to expand back). */
+  transform: rotate(180deg);
+}
