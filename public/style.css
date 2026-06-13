@@ -532,14 +532,22 @@
       text-overflow: ellipsis;
       max-width: 100%;
     }
+    /* Genre pill in the NP viz area — solid opaque bg matching the queue
+       list styling, no glow/shadow/transparency so it reads even on a
+       busy canvas. Text-shadow from the parent is cancelled. The inline
+       style sets color+background (from getGenreStyle); we override bg
+       with an opaque surface so it doesn't get lost on the visualizer. */
     .np-track-meta .np-genre-tag {
       font-size: 0.66rem;
       font-weight: 600;
       letter-spacing: 0.03em;
-      padding: 3px 9px;
+      padding: 4px 10px;
       border-radius: 999px;
       display: inline-block;
       align-self: flex-start;
+      text-shadow: none !important;
+      background: var(--surface-active) !important;
+      border: 1px solid var(--border);
     }
     .np-vresizer {
       height: 6px; cursor: row-resize; background: transparent;
@@ -1142,7 +1150,7 @@ html[data-theme="auto"] .onboarding-card {
    meta line without competing with the title for attention. */
 .np-radio-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--surface);
   color: var(--accent);
   border: 1px solid var(--accent);
   border-radius: 999px;
@@ -1828,22 +1836,38 @@ html[data-theme="auto"] #aboutModal .about-card * {
 /* Viz gear (the "..." button) and the menu it opens were hardcoded with
    dark rgba backgrounds and white-ish borders. Re-derive them from the
    theme so they don't sit as a black blob over a light viz canvas. */
-html[data-theme="light"] .viz-gear-btn,
-html[data-theme="auto"] .viz-gear-btn {
+html[data-theme="light"] .viz-gear-btn {
   background: rgba(255, 255, 255, 0.65) !important;
   border-color: rgba(0, 0, 0, 0.18) !important;
   color: var(--text-muted) !important;
 }
-html[data-theme="light"] .viz-gear-btn:hover,
-html[data-theme="auto"] .viz-gear-btn:hover {
+html[data-theme="light"] .viz-gear-btn:hover {
   border-color: rgba(0, 0, 0, 0.35) !important;
   color: var(--text) !important;
 }
-html[data-theme="light"] .viz-menu,
-html[data-theme="auto"] .viz-menu {
+html[data-theme="light"] .viz-menu {
   background: var(--surface) !important;
   border-color: var(--border) !important;
   color: var(--text);
+}
+/* 'auto' theme: only apply light overrides when the OS is actually light.
+   Without the media wrapper, data-theme="auto" applied the light style
+   even when the OS was in dark mode — making the viz gear appear grey. */
+@media (prefers-color-scheme: light) {
+  html[data-theme="auto"] .viz-gear-btn {
+    background: rgba(255, 255, 255, 0.65) !important;
+    border-color: rgba(0, 0, 0, 0.18) !important;
+    color: var(--text-muted) !important;
+  }
+  html[data-theme="auto"] .viz-gear-btn:hover {
+    border-color: rgba(0, 0, 0, 0.35) !important;
+    color: var(--text) !important;
+  }
+  html[data-theme="auto"] .viz-menu {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text);
+  }
 }
 
 /* Track info on the viz panel: in light mode, the track title/artist
@@ -1902,4 +1926,31 @@ html[data-theme="auto"] .np-track-info {
 #toggleNpRow.active svg {
   /* Arrow pointing down when in collapsed mode (click to expand back). */
   transform: rotate(180deg);
+}
+
+/* ─── v3.15.15: sleep timer custom field — simple plain text input ───── */
+.sleep-custom-input {
+  width: 60px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.83rem;
+  text-align: center;
+}
+.sleep-custom-input::placeholder { color: var(--text-dim); }
+.sleep-custom-input:focus { outline: none; border-color: var(--accent); }
+.sleep-custom-suffix {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-left: -4px;
+}
+/* Ensure the row aligns all items on the same baseline. */
+.sleep-timer-row {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
 }

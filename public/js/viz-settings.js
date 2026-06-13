@@ -142,7 +142,8 @@ function syncSettingsUpdate() {
     label.textContent = '✓ v' + st.version + ' ready — restart to install';
     label.style.color = 'var(--green)'; label.style.borderColor = 'var(--green)'; label.style.background = 'rgba(122,196,122,0.08)';
   } else if (st.status === 'error') {
-    label.textContent = '⚠ check failed — click retry';
+    var hint = (st.errorMsg || st.error || 'unknown').slice(0, 60);
+    label.textContent = '⚠ ' + hint;
     label.style.color = 'var(--red)'; label.style.borderColor = 'var(--red)'; label.style.background = 'rgba(224,85,85,0.08)';
   } else if (st.status === 'uptodate') {
     label.textContent = '✓ Up to date';
@@ -570,13 +571,18 @@ if (isDesktop) {
     badge.onclick = function() { window.resonance.restartToUpdate(); };
     syncSettingsUpdate();
   });
-  window.resonance.onUpdateError(function() {
+  window.resonance.onUpdateError(function(d) {
     var badge = document.getElementById('updateBadge');
     window._updateState.status = 'error';
-    badge.textContent = 'update error — click to retry';
+    window._updateState.errorMsg = (d && d.message) || 'unknown';
+    // Don't loop 'click to retry' when the download keeps failing —
+    // surface the manual download path instead so the user isn't stuck.
+    badge.textContent = 'Update failed — download manually';
     setBadgeStyle(badge, 'error');
     badge.style.cursor = 'pointer';
-    badge.onclick = triggerDownload;
+    badge.onclick = function() {
+      window.open('https://github.com/n3lio/Ghetto-Blaster/releases/latest', '_blank');
+    };
     syncSettingsUpdate();
   });
   window.resonance.onUpdateUpToDate(function() {
