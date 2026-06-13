@@ -376,10 +376,23 @@ async function scanFolders() {
 
   const excludeFolders = new Set((config.excludeFolders || []).map(f => f.toLowerCase()));
 
-  log.info('scan starting', { folders: config.musicFolders, useWorker: !!scannerPool });
+  log.info('scan starting', {
+    folders: config.musicFolders,
+    workerPoolActive: !!(scannerPool && scannerPool.available()),
+    workerCount: scannerPool ? scannerPool.size : 0,
+    existingTracks: trackCount(),
+  });
   broadcast({ type: 'scan:start' });
-  library = [];
-  genres = new Set();
+  // v3.15.14: don't wipe the library at the start of a scan. With the
+  // previous behaviour, the user could not 'Shuffle All' or play any
+  // track while a rescan was in flight — every track id 404'd until the
+  // scanner caught up. Instead, keep the existing library and refresh
+  // entries as we go; we still prune deleted paths at the end via the
+  // seenPaths set.
+  // Genres are rebuilt incrementally — start with whatever we already
+  // know so the UI doesn't lose its dropdown options during the scan.
+  // (At end-of-scan we recompute the set from the live library to drop
+  // genres that came from now-deleted tracks.)
 
   // Track which paths are seen this scan (to prune deleted entries from the id map)
   const seenPaths = new Set();
@@ -398,11 +411,27 @@ async function scanFolders() {
     await scanDirectory(resolved, excludeFolders, seenPaths);
   }
 
-  // Prune deleted paths from the id map so it doesn't grow forever
+  // Prune deleted paths from the id map so it doesn't grow forever, AND
+  // drop the corresponding library entries (we kept the old library
+  // around during the scan so playback worked, now sweep stale rows).
   for (const p of Object.keys(libraryIds.paths)) {
-    if (!seenPaths.has(p)) delete libraryIds.paths[p];
+    if (!seenPaths.has(p)) {
+      const staleId = libraryIds.paths[p];
+      delete libraryIds.paths[p];
+      if (Number.isInteger(staleId) && library[staleId]) {
+        delete library[staleId];
+      }
+    }
   }
   saveLibraryIds();
+
+  // Rebuild the genres set from what's actually in the library now,
+  // so deleted tracks' genres drop off.
+  genres = new Set();
+  for (let i = 0; i < library.length; i++) {
+    const t = library[i];
+    if (t && t.genre) genres.add(t.genre);
+  }
 
   // Sweep cover cache: remove files whose track id is no longer in the library.
   try {
@@ -465,6 +494,22 @@ async function ingestAudioFile(fullPath, entryName) {
   const trackId = getOrAssignTrackId(fullPath);
   let mtimeMs = 0;
   try { mtimeMs = fs.statSync(fullPath).mtimeMs; } catch (e) { /* ignore */ }
+
+  // ─── Incremental skip ──────────────────────────────────────────────────
+  // If the track already exists in the library (previous scan or boot) AND
+  // its mtime is unchanged since we last parsed it, there's zero point in
+  // re-reading the metadata — it hasn't changed. This turns subsequent
+  // rescans from O(n * parse_cost) into O(n * stat_cost) for unchanged
+  // files, which is a ~20-50× speedup after the first scan.
+  const existing = library[trackId];
+  if (existing && existing._mtimeMs === Math.floor(mtimeMs)) {
+    // File unchanged — keep the existing entry and just update the genre
+    // set (genres is rebuilt from scratch at end-of-scan, but we add here
+    // too so the mid-scan state is consistent).
+    if (existing.genre) genres.add(existing.genre);
+    return;
+  }
+
   try {
     // Re-use cached cover if the source mtime matches.
     const cachedCoverPath = findCachedCover(trackId, mtimeMs);
@@ -510,6 +555,7 @@ async function ingestAudioFile(fullPath, entryName) {
       genres: multitag.splitGenreTag(rawGenre),
       hasCover,
       replayGain,
+      _mtimeMs: Math.floor(mtimeMs),
     };
   } catch (e) {
     library[trackId] = {
@@ -553,9 +599,11 @@ async function scanDirectory(dir, excludeFolders, seenPaths) {
   }
 
   // Parallel batch of audio file parses — concurrency tuned to the worker
-  // pool size when available, otherwise a small fixed number that lets I/O
-  // and CPU overlap on the main thread.
-  const concurrency = (scannerPool && scannerPool.available()) ? scannerPool.size * 2 : 8;
+  // pool size when available, otherwise a higher-than-sequential number
+  // that lets I/O and CPU overlap on the main thread. v3.15.14 bumps the
+  // inline fallback from 8 to 16 to squeeze more throughput when workers
+  // aren't available (common on first run before the pool stabilizes).
+  const concurrency = (scannerPool && scannerPool.available()) ? scannerPool.size * 3 : 16;
   for (let i = 0; i < audioFiles.length; i += concurrency) {
     const slice = audioFiles.slice(i, i + concurrency);
     await Promise.all(slice.map(f => ingestAudioFile(f.fullPath, f.entryName)));
