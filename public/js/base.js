@@ -31,8 +31,13 @@ function coverUrl(id) { return apiUrl('/api/cover/' + id); }
 function streamUrl(id) { return apiUrl('/api/stream/' + id); }
 
 // Wrap fetch so every /api/* call carries the Authorization header.
+// Also: if a 401 comes back AND we're NOT on localhost, the stored token
+// is stale (new server install generated a fresh one). We surface a clear
+// message and wipe the bad token from sessionStorage so the next QR scan
+// can write the correct one.
 (function() {
   var _fetch = window.fetch.bind(window);
+  var _authFailed = false;
   window.fetch = function(input, init) {
     if (!AUTH_TOKEN) return _fetch(input, init);
     var url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -41,7 +46,21 @@ function streamUrl(id) { return apiUrl('/api/stream/' + id); }
     var headers = new Headers(init.headers || {});
     if (!headers.has('Authorization')) headers.set('Authorization', 'Bearer ' + AUTH_TOKEN);
     init.headers = headers;
-    return _fetch(input, init);
+    return _fetch(input, init).then(function(res) {
+      if (res.status === 401 && !_authFailed) {
+        _authFailed = true;
+        try { sessionStorage.removeItem('gb_auth_token'); } catch(e) {}
+        // Show a persistent banner telling the user to re-scan the QR.
+        if (typeof document !== 'undefined' && !document.getElementById('authExpiredBanner')) {
+          var banner = document.createElement('div');
+          banner.id = 'authExpiredBanner';
+          banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:14px 20px;background:var(--red,#e05555);color:#fff;font-size:0.85rem;font-weight:600;text-align:center;z-index:99999;';
+          banner.textContent = 'Access denied — the server token has changed. Re-scan the QR code from the desktop Settings to reconnect.';
+          document.body.prepend(banner);
+        }
+      }
+      return res;
+    });
   };
 })();
 

@@ -86,6 +86,16 @@
     header .mode-toggle,
     header .header-right > * { -webkit-app-region: no-drag; }
     header h1 { -webkit-app-region: drag; cursor: default; }
+    /* Guarantee a draggable grab zone even when the header is full of
+       badges/pills. The pseudo-element stretches to fill any leftover
+       space and remains draggable, so the user always has somewhere to
+       grab even if every visible element happens to be a no-drag child. */
+    header::after {
+      content: '';
+      flex: 1;
+      min-width: 40px;
+      -webkit-app-region: drag;
+    }
 
     @property --title-end {
       syntax: '<color>';
