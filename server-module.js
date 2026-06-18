@@ -142,7 +142,11 @@ function setDataDir(dir) {
   // process alive on quit).
   if (backupTimer) backupTimer.stop();
   backupTimer = backupLib.startScheduledBackups(DATA_DIR, log);
-  log.info('data dir set', { dir });
+  // Load the library cache so the incremental mtime-skip works from the
+  // first scan at boot. Without this the library is empty and every file
+  // is re-parsed despite having the same mtime.
+  loadLibraryCache();
+  log.info('data dir set', { dir, cachedTracks: library.filter(Boolean).length });
 }
 
 // ─── Auth Token (LAN access) ────────────────────────────────────────────────
@@ -326,6 +330,40 @@ function getCoversDir() { return path.join(DATA_DIR, '__covers'); }
 // Ensure covers dir exists at startup
 (function() { var d = getCoversDir(); if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); })();
 
+// ─── Library cache (persisted between sessions) ──────────────────────────────
+// Without a cache the library is rebuilt from scratch every time the server
+// boots — each file parsed again regardless of mtime. With this cache the
+// incremental skip works on the very first scan after a reboot.
+function getLibraryCachePath() { return path.join(DATA_DIR, 'library-cache.json'); }
+
+function loadLibraryCache() {
+  try {
+    const p = getLibraryCachePath();
+    if (!fs.existsSync(p)) return;
+    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (!data || !Array.isArray(data.entries)) return;
+    data.entries.forEach(function(entry) {
+      if (!entry || typeof entry.id !== 'number') return;
+      library[entry.id] = entry;
+      if (entry.genre) genres.add(entry.genre);
+    });
+    if (typeof log !== 'undefined' && log) {
+      log.info('library cache loaded', { tracks: library.filter(Boolean).length });
+    }
+  } catch (e) {
+    if (typeof log !== 'undefined' && log) log.warn('library cache load failed', { error: e.message });
+  }
+}
+
+function saveLibraryCache() {
+  try {
+    const entries = library.filter(Boolean);
+    fs.writeFileSync(getLibraryCachePath(), JSON.stringify({ entries: entries }));
+  } catch (e) {
+    if (typeof log !== 'undefined' && log) log.warn('library cache save failed', { error: e.message });
+  }
+}
+
 // ─── Library Scanner ─────────────────────────────────────────────────────────
 const AUDIO_EXTENSIONS = validation.AUDIO_EXTENSIONS;
 let scanning = false;
@@ -454,6 +492,9 @@ async function scanFolders() {
     genres: genres.size,
     durationMs: Date.now() - scanStartedAt,
   });
+  // Persist the library so the next boot starts with it and the
+  // incremental mtime-skip can short-circuit 99% of the work.
+  saveLibraryCache();
   broadcast({ type: 'scan:done', data: { count, genres: genres.size } });
   return library;
 }

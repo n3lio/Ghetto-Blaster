@@ -1048,6 +1048,58 @@ if ('serviceWorker' in navigator && !window.resonance) {
 //  in edge cases. If pause mid-fade leaves audio.volume low, hitting play
 //  resumes the fade-in correctly.)
 
+// ─── Clickable artist / album in Now Playing (v3.16.1) ────────────────────
+// Click the artist name → jumps to Library filtered by artist:"name".
+// Click the album line → same with album:"name".
+(function setupNpClickableInfo() {
+  var artistEl = document.getElementById('npTrackArtist');
+  var metaEl = document.getElementById('npTrackMeta');
+  if (artistEl) {
+    artistEl.style.cursor = 'pointer';
+    artistEl.style.pointerEvents = 'auto';
+    artistEl.addEventListener('click', function() {
+      var text = artistEl.textContent.trim();
+      if (!text) return;
+      document.querySelector('[data-tab="library"]').click();
+      setTimeout(function() {
+        if (typeof jumpToTracksWithFilter === 'function') {
+          jumpToTracksWithFilter('artist:"' + text + '"');
+        } else {
+          var btn = document.querySelector('.lib-view-btn[data-view="tracks"]');
+          if (btn) btn.click();
+          var search = document.getElementById('search');
+          if (search) { search.value = 'artist:"' + text + '"'; search.dispatchEvent(new Event('input')); }
+        }
+      }, 50);
+    });
+  }
+  if (metaEl) {
+    metaEl.style.pointerEvents = 'auto';
+    metaEl.addEventListener('click', function(e) {
+      // Only react to clicks on the album line (<div> children), not the
+      // genre pill or the radio button.
+      var target = e.target.closest ? e.target.closest('.np-track-meta > div') : null;
+      if (!target) return;
+      var text = target.textContent.trim();
+      if (!text) return;
+      // Strip year suffix like " (2021)"
+      text = text.replace(/\s*\(\d{4}\)\s*$/, '').trim();
+      if (!text) return;
+      document.querySelector('[data-tab="library"]').click();
+      setTimeout(function() {
+        if (typeof jumpToTracksWithFilter === 'function') {
+          jumpToTracksWithFilter('album:"' + text + '"');
+        } else {
+          var btn = document.querySelector('.lib-view-btn[data-view="tracks"]');
+          if (btn) btn.click();
+          var search = document.getElementById('search');
+          if (search) { search.value = 'album:"' + text + '"'; search.dispatchEvent(new Event('input')); }
+        }
+      }, 50);
+    });
+  }
+})();
+
 // ─── Accessibility helpers (v3.15) ─────────────────────────────────────────
 // Three small additions that cost nothing and help keyboard / screen-reader
 // users a lot:
@@ -1413,8 +1465,29 @@ if ('serviceWorker' in navigator && !window.resonance) {
       var lo = Math.min(dragStart, endY);
       var hi = Math.max(dragStart, endY);
       dragStart = null;
-      // Show Apply / Cancel instead of jumping immediately so the user
-      // can refine the range or back out without losing their place.
+      showApplyControls(lo, hi);
+    });
+
+    // Touch support (mobile) — same behaviour as mouse.
+    canvas.addEventListener('touchstart', function(e) {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      pendingRange = null;
+      dragStart = yearAt(e.touches[0].clientX);
+      showSelection(dragStart, dragStart);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function(e) {
+      if (dragStart == null || e.touches.length !== 1) return;
+      e.preventDefault();
+      showSelection(dragStart, yearAt(e.touches[0].clientX));
+    }, { passive: false });
+    canvas.addEventListener('touchend', function(e) {
+      if (dragStart == null) return;
+      var ct = e.changedTouches[0];
+      var endY = yearAt(ct.clientX);
+      var lo = Math.min(dragStart, endY);
+      var hi = Math.max(dragStart, endY);
+      dragStart = null;
       showApplyControls(lo, hi);
     });
   }
@@ -1629,9 +1702,10 @@ if ('serviceWorker' in navigator && !window.resonance) {
 
   function apply(collapsed) {
     panel.classList.toggle('np-collapsed', !!collapsed);
-    btn.classList.toggle('active', !!collapsed);
+    btn.classList.toggle('active', false); // never stays "active" looking
     var label = btn.querySelector('.np-toggle-label');
-    if (label) label.textContent = collapsed ? 'Expanded' : 'Compact';
+    // Label reflects the ACTION (what clicking will do), not the state.
+    if (label) label.textContent = collapsed ? 'Expand' : 'Compact';
     btn.title = collapsed
       ? 'Show cover and visualizer'
       : 'Hide cover and visualizer to give the queue full height';

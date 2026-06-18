@@ -49,9 +49,9 @@
 
 <header>
   <h1>Ghetto <b>Blaster</b></h1>
-  <span id="updateBadge" style="display:none;font-size:0.68rem;color:var(--green);background:rgba(122,196,122,0.1);padding:3px 8px;border-radius:12px;cursor:pointer;border:1px solid rgba(122,196,122,0.3);"></span>
-  <span id="rescanNeededBadge" style="display:none;font-size:0.68rem;color:var(--accent);background:var(--accent-subtle);padding:3px 10px;border-radius:12px;cursor:pointer;border:1px solid var(--accent);font-weight:600;letter-spacing:0.02em;" title="You changed music folders without scanning. Click to rescan now.">Library outdated · Scan</span>
   <div class="header-right">
+    <span id="updateBadge" style="display:none;font-size:0.68rem;color:var(--green);background:rgba(122,196,122,0.1);padding:3px 8px;border-radius:12px;cursor:pointer;border:1px solid rgba(122,196,122,0.3);-webkit-app-region:no-drag;"></span>
+    <span id="rescanNeededBadge" style="display:none;font-size:0.68rem;color:var(--accent);background:var(--accent-subtle);padding:3px 10px;border-radius:12px;cursor:pointer;border:1px solid var(--accent);font-weight:600;letter-spacing:0.02em;-webkit-app-region:no-drag;" title="You changed music folders without scanning. Click to rescan now.">Library outdated · Scan</span>
     <div class="mode-toggle" id="modeToggle" style="display:none;">
       <button class="mode-btn active" data-mode="remote">Remote</button>
       <button class="mode-btn" data-mode="stream" disabled title="Coming soon" style="opacity:0.4;cursor:not-allowed;">Stream</button>
@@ -72,9 +72,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
     <div class="window-controls" id="winControls">
-      <button class="win-btn minimize" id="tbMin" title="Minimize"></button>
-      <button class="win-btn maximize" id="tbMax" title="Maximize"></button>
-      <button class="win-btn close" id="tbClose" title="Close"></button>
+      <button class="win-btn minimize" id="tbMin" title="Minimize">–</button>
+      <button class="win-btn maximize" id="tbMax" title="Maximize">□</button>
+      <button class="win-btn close" id="tbClose" title="Close">×</button>
     </div>
   </div>
 </header>
@@ -146,8 +146,8 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M4 14l8 -8 8 8M4 20h16"/></svg>
           <span class="np-toggle-label">Compact</span>
         </button>
-        <button id="shuffleQueue">Shuffle</button>
-        <button id="clearQueue">Clear</button>
+        <button id="shuffleQueue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px;margin-right:4px;"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>Shuffle</button>
+        <button id="clearQueue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px;margin-right:4px;"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>Clear</button>
       </div>
     </div>
     <div class="track-list" id="queueList"></div>
