@@ -788,13 +788,21 @@ if ('serviceWorker' in navigator && !window.resonance) {
 
 // ─── Mini-player toggle (?mini=1) ──────────────────────────────────────────
 // Adds the `mini` class to <body> when the URL has ?mini=1, which the CSS
-// in style.css uses to swap to the compact layout. Toggled by the Electron
-// mini-player window which loads /?mini=1.
+// in style.css uses to swap to the compact layout. Also applies the theme
+// param from the URL so the mini-player opens in dark/light matching the
+// main window.
 (function setupMiniMode() {
   try {
     var url = new URL(location.href);
     if (url.searchParams.get('mini') === '1') {
       document.body.classList.add('mini');
+      // Apply theme from URL param (set by main.js at window creation).
+      var theme = url.searchParams.get('theme');
+      if (theme && typeof window.setTheme === 'function') {
+        window.setTheme(theme);
+      } else if (theme) {
+        document.documentElement.dataset.theme = theme;
+      }
     }
   } catch (e) { /* ignore */ }
 })();
@@ -1871,6 +1879,19 @@ if ('serviceWorker' in navigator && !window.resonance) {
     // assume the library now reflects what's on disk. Reset badge text.
     badge.textContent = 'Library outdated · Scan';
   }, 4000);
+})();
+
+// ─── Mini-player via double-click on cover (v3.17.1) ──────────────────────
+(function setupMiniPlayerDblClick() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  var cover = document.getElementById('npCover');
+  if (!cover) return;
+  cover.style.cursor = 'pointer';
+  cover.addEventListener('dblclick', function() {
+    if (window.resonance && window.resonance.toggleMiniPlayer) {
+      window.resonance.toggleMiniPlayer();
+    }
+  });
 })();
 
 // ─── Now Playing collapse — full-height queue mode (v3.15.13) ─────────────

@@ -42,24 +42,152 @@ document.querySelectorAll('.viz-menu-item[data-viz]').forEach(function(item) {
     if (isDesktop && window.resonance) window.resonance.setConfig({ vizMode: vizMode });
   });
 });
-// Color mode selection
-document.querySelectorAll('.viz-menu-item[data-color]').forEach(function(item) {
-  item.addEventListener('click', function(e) {
-    e.stopPropagation();
-    vizColorMode = item.dataset.color;
-    if (viz) viz.setColorMode(vizColorMode);
-    document.querySelectorAll('.viz-menu-item[data-color]').forEach(function(i){i.classList.remove('active')});
-    item.classList.add('active');
-    document.getElementById('vizMenu').classList.remove('open');
-    if (isDesktop && window.resonance) window.resonance.setConfig({ vizColorMode: vizColorMode });
+// ─── New viz-menu (v3.17.1): groups + sub-menus + toggles ────────────────
+(function setupNewVizMenu() {
+  var menu = document.getElementById('vizMenu');
+  if (!menu) return;
+
+  // Sub-menu show/hide.
+  menu.querySelectorAll('.vm-has-sub').forEach(function(item) {
+    item.addEventListener('mouseenter', function() {
+      menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
+      var sub = document.getElementById(item.dataset.sub);
+      if (sub) {
+        sub.classList.add('open');
+        // Position near the triggering item.
+        sub.style.top = (item.offsetTop - menu.scrollTop) + 'px';
+      }
+    });
   });
-});
-document.getElementById('vizCloseItem').addEventListener('click', function(e) {
-  e.stopPropagation();
-  document.getElementById('vizMenu').classList.remove('open');
-  toggleViz();
-  document.getElementById('vizCloseItem').textContent = vizVisible ? 'Disable visualization' : 'Enable visualization';
-});
+  menu.addEventListener('mouseleave', function() {
+    menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
+  });
+
+  // Shape selection.
+  menu.querySelectorAll('[data-viz]').forEach(function(item) {
+    item.addEventListener('click', function(e) {
+      e.stopPropagation();
+      vizMode = item.dataset.viz;
+      if (viz) viz.setMode(vizMode);
+      menu.querySelectorAll('[data-viz]').forEach(function(i) { i.classList.toggle('active', i.dataset.viz === vizMode); });
+      menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
+      menu.classList.remove('open');
+      if (isDesktop && window.resonance) window.resonance.setConfig({ vizMode: vizMode });
+    });
+  });
+
+  // Palette selection.
+  menu.querySelectorAll('[data-color]').forEach(function(item) {
+    item.addEventListener('click', function(e) {
+      e.stopPropagation();
+      vizColorMode = item.dataset.color;
+      if (viz) viz.setColorMode(vizColorMode);
+      menu.querySelectorAll('[data-color]').forEach(function(i) { i.classList.toggle('active', i.dataset.color === vizColorMode); });
+      menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
+      menu.classList.remove('open');
+      if (isDesktop && window.resonance) window.resonance.setConfig({ vizColorMode: vizColorMode });
+    });
+  });
+
+  // Visualization toggle.
+  var vizToggle = document.getElementById('vmVizToggle');
+  function syncVizToggle() {
+    if (!vizToggle) return;
+    vizToggle.classList.toggle('on', vizVisible);
+    vizToggle.classList.toggle('off', !vizVisible);
+    vizToggle.querySelector('.vm-toggle-label').textContent = vizVisible ? 'Active' : 'Disabled';
+  }
+  syncVizToggle();
+  if (vizToggle) vizToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    toggleViz();
+    syncVizToggle();
+  });
+
+  // Mini-player toggle.
+  var miniToggle = document.getElementById('vmMiniToggle');
+  var miniActive = false;
+  function syncMiniToggle() {
+    if (!miniToggle) return;
+    miniToggle.classList.toggle('on', miniActive);
+    miniToggle.classList.toggle('off', !miniActive);
+    miniToggle.querySelector('.vm-toggle-label').textContent = miniActive ? 'Active' : 'Disabled';
+  }
+  syncMiniToggle();
+  if (miniToggle) miniToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    miniActive = !miniActive;
+    syncMiniToggle();
+    if (window.resonance && window.resonance.toggleMiniPlayer) {
+      window.resonance.toggleMiniPlayer();
+    }
+    menu.classList.remove('open');
+  });
+
+  // App > Mode pills.
+  function syncModePills() {
+    var current = (window._appConfig && window._appConfig.theme) || document.documentElement.dataset.theme || 'auto';
+    menu.querySelectorAll('[data-theme-mode]').forEach(function(p) {
+      p.classList.toggle('active', p.dataset.themeMode === current);
+    });
+  }
+  syncModePills();
+  menu.querySelectorAll('[data-theme-mode]').forEach(function(pill) {
+    pill.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (typeof window.setTheme === 'function') window.setTheme(pill.dataset.themeMode);
+      syncModePills();
+      // Sync settings modal if it's open.
+      var sel = document.getElementById('settingsThemeMode');
+      if (sel) sel.value = pill.dataset.themeMode;
+    });
+  });
+
+  // App > Color swatches.
+  function syncColorSwatches() {
+    var current = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hue')) || 0;
+    menu.querySelectorAll('.vm-color-swatch').forEach(function(s) {
+      s.classList.toggle('active', parseInt(s.dataset.hue) === current);
+    });
+  }
+  syncColorSwatches();
+  menu.querySelectorAll('.vm-color-swatch').forEach(function(sw) {
+    sw.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var hue = parseInt(sw.dataset.hue, 10);
+      document.documentElement.style.setProperty('--hue', hue);
+      var cfg = window._appConfig = window._appConfig || {};
+      cfg.hue = hue;
+      if (window.resonance && window.resonance.setConfig) window.resonance.setConfig({ hue: hue });
+      syncColorSwatches();
+      // Sync the Settings hue slider if present.
+      var slider = document.getElementById('settingsHue');
+      if (slider) slider.value = hue;
+    });
+  });
+  // Color picker → open Settings directly.
+  var picker = menu.querySelector('.vm-color-picker');
+  if (picker) picker.addEventListener('click', function(e) {
+    e.stopPropagation();
+    menu.classList.remove('open');
+    var btn = document.getElementById('settingsBtn');
+    if (btn) btn.click();
+  });
+
+  // Open/close the menu (replaces the legacy vizGearBtn handler).
+  document.getElementById('vizGearBtn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    var isOpen = menu.classList.toggle('open');
+    if (isOpen) { syncVizToggle(); syncModePills(); syncColorSwatches(); }
+  });
+  // Close on outside click.
+  document.addEventListener('click', function(e) {
+    if (!menu.contains(e.target) && !e.target.closest('.viz-gear-btn')) {
+      menu.classList.remove('open');
+      menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
+    }
+  });
+})();
 
 // Vertical resizer (cover+viz / queue split) — constrained: min 20%, max 65%
 (function() {

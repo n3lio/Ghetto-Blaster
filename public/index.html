@@ -107,27 +107,71 @@
             <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
           </button>
           <div class="viz-menu" id="vizMenu">
-            <div class="viz-menu-label">Shape</div>
-            <div class="viz-menu-item" data-viz="nebula">Nebula</div>
-            <div class="viz-menu-item" data-viz="glow">Glow</div>
-            <div class="viz-menu-item active" data-viz="drift">Drift</div>
-            <div class="viz-menu-item" data-viz="wave">Wave</div>
-            <div class="viz-menu-item" data-viz="starfield">Starfield</div>
-            <div class="viz-menu-item" data-viz="bars">Bars</div>
-            <div class="viz-menu-item" data-viz="spectrum">Spectrum</div>
-            <div class="viz-menu-item" data-viz="circular">Circular</div>
-            <div class="viz-menu-item" data-viz="text">Text</div>
-            <div class="viz-menu-label">Colors</div>
-            <div class="viz-menu-item" data-color="theme">Theme (auto)</div>
-            <div class="viz-menu-item active" data-color="cover">Cover</div>
-            <div class="viz-menu-item" data-color="palette:retro">Retro</div>
-            <div class="viz-menu-item" data-color="palette:neon">Neon</div>
-            <div class="viz-menu-item" data-color="palette:pastel">Pastel</div>
-            <div class="viz-menu-item" data-color="palette:fire">Fire</div>
-            <div class="viz-menu-item" data-color="palette:ocean">Ocean</div>
-            <div class="viz-menu-item" data-color="palette:forest">Forest</div>
-            <div class="viz-menu-item close-item" id="vizCloseItem">Disable visualization</div>
+          <!-- ─── VISUALIZATION group ─────────────────────────── -->
+          <div class="vm-group">
+            <div class="vm-group-label">Visualization</div>
+            <div class="vm-toggle vm-item" id="vmVizToggle" data-action="toggle-viz">
+              <span class="vm-dot"></span> <span class="vm-toggle-label">Active</span>
+            </div>
+            <div class="vm-item vm-has-sub" data-sub="vmShapeSub">
+              Shape <span class="vm-arrow">‹</span>
+            </div>
+            <div class="vm-item vm-has-sub" data-sub="vmPaletteSub">
+              Palette <span class="vm-arrow">‹</span>
+            </div>
           </div>
+
+          <!-- ─── MINI-PLAYER group ───────────────────────────── -->
+          <div class="vm-group">
+            <div class="vm-group-label">Mini-player</div>
+            <div class="vm-toggle vm-item" id="vmMiniToggle" data-action="toggle-mini">
+              <span class="vm-dot"></span> <span class="vm-toggle-label">Disabled</span>
+            </div>
+          </div>
+
+          <!-- ─── APP group ───────────────────────────────────── -->
+          <div class="vm-group">
+            <div class="vm-group-label">App</div>
+            <div class="vm-item vm-mode-row">
+              <span class="vm-mode-label">Mode</span>
+              <span class="vm-mode-pill" data-theme-mode="auto">Auto</span>
+              <span class="vm-mode-pill" data-theme-mode="dark">Dark</span>
+              <span class="vm-mode-pill" data-theme-mode="light">Light</span>
+            </div>
+            <div class="vm-item vm-color-row">
+              <span class="vm-mode-label">Color</span>
+              <span class="vm-color-swatch" data-hue="0" style="background:hsl(0,80%,55%);"></span>
+              <span class="vm-color-swatch" data-hue="190" style="background:hsl(190,80%,55%);"></span>
+              <span class="vm-color-swatch" data-hue="140" style="background:hsl(140,80%,55%);"></span>
+              <span class="vm-color-swatch" data-hue="30" style="background:hsl(30,80%,55%);"></span>
+              <span class="vm-color-swatch" data-hue="270" style="background:hsl(270,80%,55%);"></span>
+              <button class="vm-color-picker" title="More colors (opens Settings)">⚙</button>
+            </div>
+          </div>
+
+          <!-- ─── Sub-menus (open to the LEFT) ────────────────── -->
+          <div class="vm-sub" id="vmShapeSub">
+            <div class="vm-item" data-viz="nebula">Nebula</div>
+            <div class="vm-item" data-viz="glow">Glow</div>
+            <div class="vm-item active" data-viz="drift">Drift</div>
+            <div class="vm-item" data-viz="wave">Wave</div>
+            <div class="vm-item" data-viz="starfield">Starfield</div>
+            <div class="vm-item" data-viz="bars">Bars</div>
+            <div class="vm-item" data-viz="spectrum">Spectrum</div>
+            <div class="vm-item" data-viz="circular">Circular</div>
+            <div class="vm-item" data-viz="text">Text</div>
+          </div>
+          <div class="vm-sub" id="vmPaletteSub">
+            <div class="vm-item" data-color="theme">Theme (auto)</div>
+            <div class="vm-item active" data-color="cover">Cover</div>
+            <div class="vm-item" data-color="palette:retro">Retro</div>
+            <div class="vm-item" data-color="palette:neon">Neon</div>
+            <div class="vm-item" data-color="palette:pastel">Pastel</div>
+            <div class="vm-item" data-color="palette:fire">Fire</div>
+            <div class="vm-item" data-color="palette:ocean">Ocean</div>
+            <div class="vm-item" data-color="palette:forest">Forest</div>
+          </div>
+        </div>
         </div>
         <canvas id="vizCanvas"></canvas>
         <div class="np-track-info" id="npTrackInfo">

@@ -109,10 +109,6 @@ function updateTrayMenu() {
         if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
       },
     },
-    {
-      label: 'Mini Player',
-      click: () => toggleMiniPlayer(),
-    },
     { type: 'separator' },
     { label: `Server: ${getLanIp()}:${port}`, enabled: false },
     { type: 'separator' },
@@ -242,7 +238,9 @@ function toggleMiniPlayer() {
   // Reuse the same SPA — `?mini=1` lets the renderer switch to a compact
   // layout. If it isn't wired yet (Phase 6 frontend work), the page just
   // renders normally inside a small window — usable but not pretty.
-  miniWindow.loadURL(`http://localhost:${serverPort}/?mini=1`);
+  // Carry the current theme so the mini-player opens in the right mode.
+  const theme = (getConfig() && getConfig().theme) || 'auto';
+  miniWindow.loadURL(`http://localhost:${serverPort}/?mini=1&theme=${theme}`);
   miniWindow.on('closed', () => { miniWindow = null; });
 }
 
