@@ -1891,18 +1891,18 @@ if ('serviceWorker' in navigator && !window.resonance) {
   var btnQuit = document.getElementById('closeModalQuit');
   if (!modal || !btnTray || !btnQuit) return;
   window.resonance.onCloseRequested(function() {
-    modal.style.display = 'flex';
+    modal.classList.add('open');
   });
   btnTray.addEventListener('click', function() {
-    modal.style.display = 'none';
+    modal.classList.remove('open');
     window.resonance.closeConfirm('tray');
   });
   btnQuit.addEventListener('click', function() {
-    modal.style.display = 'none';
+    modal.classList.remove('open');
     window.resonance.closeConfirm('quit');
   });
   modal.addEventListener('click', function(e) {
-    if (e.target === modal) modal.style.display = 'none';
+    if (e.target === modal) modal.classList.remove('open');
   });
 })();
 
