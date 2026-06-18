@@ -1410,7 +1410,7 @@ if ('serviceWorker' in navigator && !window.resonance) {
 
   function gaplessEnabled() {
     var cfg = window._appConfig || {};
-    return !!cfg.gapless && !cfg.crossfade;
+    return !!cfg.gapless;
   }
   function nextTrackId() {
     var q = window.queue, idx = window.currentIndex;
