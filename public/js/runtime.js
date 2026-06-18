@@ -1149,6 +1149,90 @@ if ('serviceWorker' in navigator && !window.resonance) {
 //  in edge cases. If pause mid-fade leaves audio.volume low, hitting play
 //  resumes the fade-in correctly.)
 
+// ─── v3.17 UI polish: tooltips + volume fill + tab glow + checkmark ────────
+(function setupUiPolish() {
+  if (typeof document === 'undefined') return;
+
+  // ─── Tooltips on all interactive buttons that lack one ──────────────
+  var tips = {
+    shuffleBtn: 'Shuffle the current queue',
+    shuffleQueue: 'Randomize track order',
+    clearQueue: 'Remove all tracks from queue',
+    playAll: 'Shuffle and play the entire library',
+    volumeSlider: 'Volume',
+    progressBar: 'Seek in track',
+    genreFilter: 'Filter by genre',
+    sortSelect: 'Sort tracks',
+    search: 'Search by title, artist, album, genre (supports year:YYYY, genre:"name")',
+    addFolderBtn: 'Add a music folder to scan',
+    settingsSave: 'Save settings and rescan library',
+    settingsSaveOnly: 'Save settings without rescanning',
+  };
+  Object.keys(tips).forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el && !el.getAttribute('title')) el.setAttribute('title', tips[id]);
+  });
+  // Library view mode buttons
+  document.querySelectorAll('.lib-view-btn').forEach(function(b) {
+    if (!b.title) b.title = 'View: ' + (b.dataset.view || '');
+  });
+
+  // ─── Volume slider: fill track + dynamic tooltip ───────────────────
+  var vol = document.getElementById('volumeSlider');
+  if (vol) {
+    function updateVolFill() {
+      var pct = Math.round(parseFloat(vol.value) * 100);
+      vol.style.background = 'linear-gradient(to right, var(--accent) 0%, var(--accent) '
+        + pct + '%, var(--surface-active) ' + pct + '%, var(--surface-active) 100%)';
+      vol.title = 'Volume: ' + pct + '%' + (pct === 0 ? ' (muted)' : pct === 100 ? ' (max)' : '');
+    }
+    vol.addEventListener('input', updateVolFill);
+    // Initial paint.
+    setTimeout(updateVolFill, 500);
+    // Re-paint whenever audio.volume changes externally.
+    var audioEl = document.querySelector('audio');
+    if (audioEl) {
+      audioEl.addEventListener('volumechange', function() {
+        vol.value = audioEl.volume;
+        updateVolFill();
+      });
+    }
+  }
+
+  // ─── Now Playing tab: add .is-playing when music plays ─────────────
+  var npTab = document.querySelector('[data-tab="nowplaying"]');
+  var audioForTab = document.querySelector('audio');
+  if (npTab && audioForTab) {
+    function syncTabPlaying() {
+      npTab.classList.toggle('is-playing', !audioForTab.paused && !audioForTab.ended);
+    }
+    audioForTab.addEventListener('play', syncTabPlaying);
+    audioForTab.addEventListener('pause', syncTabPlaying);
+    audioForTab.addEventListener('ended', syncTabPlaying);
+  }
+
+  // ─── Library + button → ✓ when track is already in the queue ───────
+  // Re-evaluate after each renderTracks() by observing the trackList DOM.
+  function markInQueue() {
+    var q = window.queue;
+    if (!Array.isArray(q)) return;
+    var qSet = new Set(q);
+    document.querySelectorAll('#trackList .add-btn').forEach(function(btn) {
+      var id = parseInt(btn.dataset.id, 10);
+      var inQ = qSet.has(id);
+      btn.classList.toggle('in-queue', inQ);
+      btn.textContent = inQ ? '✓' : '+';
+      btn.title = inQ ? 'Already in queue' : 'Add to queue';
+    });
+  }
+  if (typeof MutationObserver !== 'undefined') {
+    var tl = document.getElementById('trackList');
+    if (tl) new MutationObserver(markInQueue).observe(tl, { childList: true });
+  }
+  // Also refresh when the queue itself changes.
+  setInterval(markInQueue, 2000);
+})();
+
 // ─── Clickable artist / album in Now Playing (v3.16.1) ────────────────────
 // Click the artist name → jumps to Library filtered by artist:"name".
 // Click the album line → same with album:"name".

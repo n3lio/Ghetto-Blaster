@@ -1990,3 +1990,67 @@ html[data-theme="auto"] .np-track-info {
 
 /* About '?' button: nudge text up 1px. */
 #shortcutsBtn { padding-bottom: 1px; }
+
+/* ─── v3.17: volume slider fill + track progress bar match ───────────── */
+/* Fill the volume slider track up to the thumb position using a
+   gradient trick (Chrome/Electron + Firefox). */
+#volumeSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-active);
+  outline: none;
+  cursor: pointer;
+}
+#volumeSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-warm);
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--accent);
+  margin-top: -4px; /* center on a 4px track */
+}
+#volumeSlider::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-warm);
+  cursor: pointer;
+}
+#volumeSlider::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* Tab hover */
+.tab:not(.active):hover {
+  background: var(--surface);
+  border-radius: 4px 4px 0 0;
+}
+
+/* Now Playing tab glow when playback is active */
+.tab[data-tab="nowplaying"].is-playing {
+  border-bottom-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+.tab[data-tab="nowplaying"].is-playing:not(.active) {
+  border-bottom-color: var(--accent-glow);
+}
+
+/* Settings + ? buttons: hover fills bg like the toolbar buttons do. */
+.settings-btn:hover {
+  background: var(--surface-hover);
+}
+
+/* Queue track-item: + button → ✓ when in queue. */
+.track-item .add-btn.in-queue {
+  color: var(--green);
+  pointer-events: none;
+}
+.track-item .add-btn.in-queue::after {
+  content: none; /* ✓ is set in textContent by JS */
+}
