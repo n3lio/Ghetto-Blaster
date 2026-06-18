@@ -35,6 +35,16 @@ function createWindow() {
     title: 'Ghetto Blaster',
     icon: getIconPath(),
     frame: false,
+    // The CSS -webkit-app-region:drag approach doesn't work reliably on
+    // every Windows + Electron combination. As a belt-and-suspenders fix,
+    // we also enable the Electron-native titleBarOverlay which handles
+    // window movement at the compositor level. The overlay height is set
+    // to 0 so it's invisible (we render our own header with our own
+    // minimize/maximize/close buttons) but the DRAG from the header still
+    // works because frame:false + titleBarStyle:'hidden' enables native
+    // move on any area marked drag.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -183,7 +193,26 @@ ipcMain.handle('window:maximize', () => {
     else mainWindow.maximize();
   }
 });
-ipcMain.handle('window:close', () => { if (mainWindow) mainWindow.close(); });
+ipcMain.handle('window:close', async () => {
+  if (!mainWindow) return;
+  const { dialog } = require('electron');
+  const { response, checkboxChecked } = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    buttons: ['Minimize to tray', 'Quit'],
+    defaultId: 0,
+    cancelId: 0,
+    title: 'Close Ghetto Blaster',
+    message: 'Do you want to quit or keep the server running in the background?',
+    detail: 'Quitting disconnects all remote devices.',
+    checkboxLabel: 'Remember this choice',
+  });
+  if (response === 1) {
+    app.isQuitting = true;
+    app.quit();
+  } else {
+    mainWindow.hide();
+  }
+});
 
 // Open Bluetooth settings (Windows)
 ipcMain.handle('app:open-bt-settings', () => {

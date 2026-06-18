@@ -105,20 +105,16 @@
       font-weight: 400;
       letter-spacing: -0.02em;
       --title-end: #c47a7a;
-      background: linear-gradient(135deg, var(--accent), var(--title-end));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: titleShift 10s ease infinite;
+      /* v3.17.2 stripped the gradient from h1 itself (moved to <b> only).
+         Keep text-fill so 'Ghetto' renders in the accent color. */
+      -webkit-text-fill-color: var(--accent);
       position: relative;
       cursor: default;
-      transition: letter-spacing 0.2s;
-      /* Make the h1 fill all the horizontal space between the title text
-         and .header-right so the entire middle area of the header bar is
-         a drag zone. Without flex:1 the h1 only wraps the text content
-         (~90px) and the rest of the header is covered by the .header-right
-         children's no-drag, leaving nowhere to grab on narrow windows. */
-      flex: 1;
+      /* NO flex:1 — that made h1 cover the full header width and broke the
+         drag because .header-right children (no-drag) sat on top of the h1
+         in z-order. Keeping h1 content-sized leaves the space between it
+         and .header-right as bare header background, which carries the
+         -webkit-app-region:drag from the <header> element itself. */
     }
     header h1 b { font-weight: 800; }
     header h1:hover {
@@ -2156,39 +2152,48 @@ html[data-theme="auto"] .np-track-info {
 /* Position sub near the parent item that triggered it. */
 .viz-menu { position: relative; }
 
-/* ─── v3.17.2: volume bar same thickness as progress + thumb center ──── */
+/* ─── v3.17.3: volume bar = same thickness as progress bar, thumb centered */
 #volumeSlider {
   height: 5px !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+#volumeSlider::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 2.5px;
 }
 #volumeSlider::-webkit-slider-thumb {
-  margin-top: -3.5px !important; /* (12px thumb - 5px track) / 2 */
+  -webkit-appearance: none !important;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-warm);
+  box-shadow: 0 0 0 1px var(--accent);
+  cursor: pointer;
+  /* Vertically center: -(thumbH - trackH)/2 */
+  margin-top: -3.5px !important;
 }
 
 /* ─── v3.17.2: win-btn symbols raised 2px ────────────────────────────── */
 .win-btn { line-height: 11px !important; padding-bottom: 2px; }
 
-/* ─── v3.17.2: title "Blaster" gradient animation ───────────────────── */
-/* Only the bold <b> part animates — the "Ghetto" keeps the theme accent
-   color statically so the title reads as an anchor. The animation shifts
-   the right stop through a handful of candy colors that look good on
-   both dark and light surfaces. */
-header h1 {
-  background: none !important;
-  -webkit-background-clip: unset !important;
-  -webkit-text-fill-color: var(--accent) !important;
-  animation: none !important;
-}
+/* ─── v3.17.3: title "Blaster" gradient + glitch on hover ────────────── */
+/* "Ghetto" = solid accent. "Blaster" = gradient L→R with rotating right
+   stop. Hover glitch still fires on the whole h1. */
 header h1 b {
-  -webkit-text-fill-color: transparent;
-  background: linear-gradient(90deg, var(--accent), var(--title-end));
-  -webkit-background-clip: text;
-  background-clip: text;
+  -webkit-text-fill-color: transparent !important;
+  background: linear-gradient(90deg, var(--accent), var(--title-end, #e06b9f)) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
   animation: blasterShift 12s ease infinite;
 }
+header h1:hover {
+  animation: titleGlitch 0.4s steps(3) 1 !important;
+}
 @keyframes blasterShift {
-  0%, 100% { --title-end: #e06b9f; }   /* rose */
-  20%      { --title-end: #b68adf; }   /* purple */
-  40%      { --title-end: #5ba8e8; }   /* blue */
-  60%      { --title-end: #4dd4ac; }   /* teal */
-  80%      { --title-end: #e8a435; }   /* amber */
+  0%, 100% { --title-end: #e06b9f; }
+  20%      { --title-end: #b68adf; }
+  40%      { --title-end: #5ba8e8; }
+  60%      { --title-end: #4dd4ac; }
+  80%      { --title-end: #e8a435; }
 }

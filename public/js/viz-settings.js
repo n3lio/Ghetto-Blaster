@@ -32,7 +32,10 @@ var vizColorMode = 'cover';
 // with the new setupNewVizMenu() IIFE below (double-toggle cancelled out,
 // menu never opened). All interaction is now wired in setupNewVizMenu().
 // ─── New viz-menu (v3.17.1): groups + sub-menus + toggles ────────────────
-(function setupNewVizMenu() {
+// Wrapped in try/catch so a failure here can't kill the rest of the file
+// (which includes the settings modal listener at the bottom). If this
+// throws, the menu just won't work but Settings will still open.
+try { (function setupNewVizMenu() {
   var menu = document.getElementById('vizMenu');
   if (!menu) return;
 
@@ -176,7 +179,7 @@ var vizColorMode = 'cover';
       menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
     }
   });
-})();
+})(); } catch (e) { console.error('[gb] viz-menu setup failed:', e); }
 
 // Vertical resizer (cover+viz / queue split) — constrained: min 20%, max 65%
 (function() {
