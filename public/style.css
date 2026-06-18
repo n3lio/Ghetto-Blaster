@@ -666,7 +666,7 @@
     }
 
     /* ─── Visualizer (inside np-viz-side) ─── */
-    .viz-gear { position: absolute; top: 8px; right: 10px; z-index: 10; }
+    .viz-gear { position: absolute; top: 8px; right: 10px; z-index: 10; width: 28px; height: 28px; overflow: visible; }
     .viz-gear-btn {
       width: 28px; height: 28px; border-radius: 50%;
       border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.6);
@@ -2200,4 +2200,22 @@ header h1:hover {
   40%      { --title-end: #5ba8e8; }
   60%      { --title-end: #4dd4ac; }
   80%      { --title-end: #e8a435; }
+}
+
+/* ─── v3.17.7: placeholder cover in light mode ──────────────────────── */
+html[data-theme="light"] .np-cover .ph,
+html[data-theme="auto"] .np-cover .ph {
+  background: linear-gradient(135deg, var(--surface), var(--bg-warm)) !important;
+}
+html[data-theme="light"] .player-cover .ph,
+html[data-theme="auto"] .player-cover .ph {
+  background: var(--surface) !important;
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="auto"] .np-cover .ph {
+    background: linear-gradient(135deg, var(--surface), var(--bg-warm)) !important;
+  }
+  html[data-theme="auto"] .player-cover .ph {
+    background: var(--surface) !important;
+  }
 }

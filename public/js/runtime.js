@@ -830,7 +830,7 @@ if ('serviceWorker' in navigator && !window.resonance) {
 
   function isEnabled() {
     var cfg = window._appConfig || {};
-    return cfg.normalize !== false; // on by default
+    return cfg.normalize === true; // off by default (experimental — causes slider jumps)
   }
   function userVolume() {
     var cfg = window._appConfig || {};
