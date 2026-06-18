@@ -2222,3 +2222,17 @@ html[data-theme="auto"] .player-cover .ph {
     background: var(--surface) !important;
   }
 }
+
+/* ─── v3.17.10: placeholder covers in light mode (queue + library) ────── */
+html[data-theme="light"] .track-cover .ph,
+html[data-theme="light"] .group-icon .ph,
+html[data-theme="light"] .track-item .track-cover .ph {
+  background: linear-gradient(135deg, var(--surface), var(--bg-warm)) !important;
+}
+@media (prefers-color-scheme: light) {
+  html[data-theme="auto"] .track-cover .ph,
+  html[data-theme="auto"] .group-icon .ph,
+  html[data-theme="auto"] .track-item .track-cover .ph {
+    background: linear-gradient(135deg, var(--surface), var(--bg-warm)) !important;
+  }
+}
