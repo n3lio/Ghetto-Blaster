@@ -1,6 +1,6 @@
 {
   "name": "ghetto-blaster",
-  "version": "3.17.4",
+  "version": "3.17.5",
   "description": "Personal music player & LAN streamer for Windows, by n3lio",
   "main": "main.js",
   "engines": {

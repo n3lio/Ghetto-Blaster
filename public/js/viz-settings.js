@@ -607,6 +607,7 @@ if (isDesktop) {
       volume: audio.volume,
       queueLength: queue.length,
       currentIndex: currentIndex,
+      hue: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hue')) || 0,
     };
     fetch('/api/desktop/state', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) }).catch(function(){});
   }

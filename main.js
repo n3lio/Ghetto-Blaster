@@ -252,9 +252,11 @@ function toggleMiniPlayer() {
   // Reuse the same SPA — `?mini=1` lets the renderer switch to a compact
   // layout. If it isn't wired yet (Phase 6 frontend work), the page just
   // renders normally inside a small window — usable but not pretty.
-  // Carry the current theme so the mini-player opens in the right mode.
-  const theme = (getConfig() && getConfig().theme) || 'auto';
-  miniWindow.loadURL(`http://localhost:${serverPort}/?mini=1&theme=${theme}`);
+  // Dedicated mini.html with its own layout + WS sync. Pass the auth
+  // token so the mini-player can call /api/* and connect to the WS.
+  const cfg = getConfig() || {};
+  const token = cfg.authToken || '';
+  miniWindow.loadURL(`http://localhost:${serverPort}/mini.html?t=${encodeURIComponent(token)}`);
   miniWindow.on('closed', () => { miniWindow = null; });
 }
 
