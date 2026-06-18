@@ -313,8 +313,13 @@ function triggerDownload() {
 }
 
 async function openSettings() {
+  // ALWAYS open the modal — even if the config fetch or any sub-step
+  // throws, the user must see the panel (possibly with stale values)
+  // rather than a dead button.
+  settingsModal.classList.add('open');
   if (window.resonance) {
-    var cfg = await window.resonance.getConfig();
+    var cfg;
+    try { cfg = await window.resonance.getConfig(); } catch(e) { cfg = window._appConfig || {}; }
     settingsFolders = cfg.musicFolders || [];
     // Snapshot the folders the user opened the modal with, so saveSettings
     // can detect a real change. _appConfig was sometimes empty when the
@@ -386,7 +391,6 @@ async function openSettings() {
     document.getElementById('settingsUpdatesSection').style.display = 'none';
   }
   renderFolderList();
-  settingsModal.classList.add('open');
 }
 
 function renderFolderList() {
@@ -553,7 +557,12 @@ if (isDesktop) {
   pill.style.display = 'flex';
   var serverInfo = { ip: '...', port: 3000, version: '' };
   window.resonance.getServerStatus().then(function(s) { serverInfo.ip = s.ip; serverInfo.port = s.port || 3000; });
-  window.resonance.getVersion().then(function(v) { serverInfo.version = v; });
+  window.resonance.getVersion().then(function(v) {
+    serverInfo.version = v;
+    // Also populate the Settings version label eagerly so it's never "v---".
+    var lbl = document.getElementById('settingsVersionLabel');
+    if (lbl) lbl.textContent = 'v' + v;
+  });
   pill.addEventListener('click', function(e) {
     e.stopPropagation();
     if (popover.contains(e.target)) return; // don't toggle when clicking inside popover

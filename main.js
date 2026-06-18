@@ -174,10 +174,20 @@ ipcMain.handle('app:restart-update', () => {
 });
 
 // JS-driven window move — renderer sends (dx, dy) deltas on each mousemove.
+// Detect which window sent the event so both main and mini can be dragged.
 ipcMain.handle('window:move', (event, dx, dy) => {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const [x, y] = mainWindow.getPosition();
-  mainWindow.setPosition(x + dx, y + dy);
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  const [x, y] = win.getPosition();
+  win.setPosition(x + dx, y + dy);
+});
+
+// Show + focus the main window (called from mini-player close/show button).
+ipcMain.handle('window:show-main', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
 });
 
 // Window controls (frameless)

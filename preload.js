@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('resonance', {
   // JS-based window move — delta-based, called from the runtime.js drag handler.
   moveWindow: (dx, dy) => ipcRenderer.invoke('window:move', dx, dy),
 
+  // Show + focus the main window (used from mini-player).
+  showMain: () => ipcRenderer.invoke('window:show-main'),
+
   // Close confirmation flow.
   onCloseRequested: (cb) => ipcRenderer.on('app:close-requested', () => cb()),
   closeConfirm: (action) => ipcRenderer.invoke('window:close-confirm', action),

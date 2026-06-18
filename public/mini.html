@@ -65,9 +65,11 @@ body {
       <div class="artist" id="miniArtist">—</div>
     </div>
     <div class="controls">
+      <button id="shuffleBtn" title="Shuffle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
       <button id="prevBtn" title="Previous"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
       <button class="play-btn" id="playBtn" title="Play / Pause"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M8 5v14l11-7z"/></svg></button>
       <button id="nextBtn" title="Next"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+      <button id="showMainBtn" title="Show main window"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M9 20h6M12 16v4"/></svg></button>
     </div>
   </div>
 </div>
@@ -79,8 +81,11 @@ var params = new URLSearchParams(location.search);
 var token = params.get('t') || '';
 var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
 
-// Close button.
-document.getElementById('closeBtn').addEventListener('click', function() { window.close(); });
+// Close button — also focus main window.
+document.getElementById('closeBtn').addEventListener('click', function() {
+  if (window.resonance && window.resonance.showMain) window.resonance.showMain();
+  window.close();
+});
 
 // Controls → remote commands to the server.
 function cmd(c) {
@@ -92,6 +97,10 @@ function cmd(c) {
 document.getElementById('playBtn').addEventListener('click', function() { cmd(isPlaying ? 'pause' : 'play'); });
 document.getElementById('prevBtn').addEventListener('click', function() { cmd('prev'); });
 document.getElementById('nextBtn').addEventListener('click', function() { cmd('next'); });
+document.getElementById('shuffleBtn').addEventListener('click', function() { cmd('shuffle'); });
+document.getElementById('showMainBtn').addEventListener('click', function() {
+  if (window.resonance && window.resonance.showMain) window.resonance.showMain();
+});
 
 // WebSocket for live state.
 var isPlaying = false;
