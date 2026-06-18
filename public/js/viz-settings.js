@@ -28,20 +28,9 @@ function toggleViz() {
 }
 
 var vizColorMode = 'cover';
-document.getElementById('vizGearBtn').addEventListener('click', function(e) { e.stopPropagation(); document.getElementById('vizMenu').classList.toggle('open'); });
-document.addEventListener('click', function() { document.getElementById('vizMenu').classList.remove('open'); });
-// Shape selection
-document.querySelectorAll('.viz-menu-item[data-viz]').forEach(function(item) {
-  item.addEventListener('click', function(e) {
-    e.stopPropagation();
-    vizMode = item.dataset.viz;
-    if (viz) viz.setMode(vizMode);
-    document.querySelectorAll('.viz-menu-item[data-viz]').forEach(function(i){i.classList.remove('active')});
-    item.classList.add('active');
-    document.getElementById('vizMenu').classList.remove('open');
-    if (isDesktop && window.resonance) window.resonance.setConfig({ vizMode: vizMode });
-  });
-});
+// Legacy vizGearBtn + shape handlers removed in v3.17.2 — they conflicted
+// with the new setupNewVizMenu() IIFE below (double-toggle cancelled out,
+// menu never opened). All interaction is now wired in setupNewVizMenu().
 // ─── New viz-menu (v3.17.1): groups + sub-menus + toggles ────────────────
 (function setupNewVizMenu() {
   var menu = document.getElementById('vizMenu');

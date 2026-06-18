@@ -186,12 +186,11 @@
     <div class="queue-header">
       <h2>Queue <span id="queueCount" style="font-weight:400;color:var(--text-dim);font-size:0.75rem;"></span></h2>
       <div class="queue-actions">
-        <button id="toggleNpRow" title="Hide cover and visualizer to give the queue full height" aria-label="Toggle cover and visualizer">
-          <svg class="np-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M4 14l8 -8 8 8"/></svg>
-          <span class="np-toggle-label">Compact</span>
-        </button>
         <button id="shuffleQueue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px;margin-right:4px;"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>Shuffle</button>
         <button id="clearQueue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="vertical-align:-1px;margin-right:4px;"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>Clear</button>
+        <button id="toggleNpRow" title="Hide cover and visualizer" aria-label="Toggle cover and visualizer" style="padding:5px 8px;">
+          <svg class="np-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><path d="M4 14l8 -8 8 8"/></svg>
+        </button>
       </div>
     </div>
     <div class="track-list" id="queueList"></div>

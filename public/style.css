@@ -2155,3 +2155,40 @@ html[data-theme="auto"] .np-track-info {
 .vm-sub.open { display: block; }
 /* Position sub near the parent item that triggered it. */
 .viz-menu { position: relative; }
+
+/* ─── v3.17.2: volume bar same thickness as progress + thumb center ──── */
+#volumeSlider {
+  height: 5px !important;
+}
+#volumeSlider::-webkit-slider-thumb {
+  margin-top: -3.5px !important; /* (12px thumb - 5px track) / 2 */
+}
+
+/* ─── v3.17.2: win-btn symbols raised 2px ────────────────────────────── */
+.win-btn { line-height: 11px !important; padding-bottom: 2px; }
+
+/* ─── v3.17.2: title "Blaster" gradient animation ───────────────────── */
+/* Only the bold <b> part animates — the "Ghetto" keeps the theme accent
+   color statically so the title reads as an anchor. The animation shifts
+   the right stop through a handful of candy colors that look good on
+   both dark and light surfaces. */
+header h1 {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: var(--accent) !important;
+  animation: none !important;
+}
+header h1 b {
+  -webkit-text-fill-color: transparent;
+  background: linear-gradient(90deg, var(--accent), var(--title-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: blasterShift 12s ease infinite;
+}
+@keyframes blasterShift {
+  0%, 100% { --title-end: #e06b9f; }   /* rose */
+  20%      { --title-end: #b68adf; }   /* purple */
+  40%      { --title-end: #5ba8e8; }   /* blue */
+  60%      { --title-end: #4dd4ac; }   /* teal */
+  80%      { --title-end: #e8a435; }   /* amber */
+}
