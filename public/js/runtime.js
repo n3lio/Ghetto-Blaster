@@ -787,21 +787,23 @@ if ('serviceWorker' in navigator && !window.resonance) {
 })();
 
 // ─── Mini-player toggle (?mini=1) ──────────────────────────────────────────
-// Adds the `mini` class to <body> when the URL has ?mini=1, which the CSS
-// in style.css uses to swap to the compact layout. Also applies the theme
-// param from the URL so the mini-player opens in dark/light matching the
-// main window.
 (function setupMiniMode() {
   try {
     var url = new URL(location.href);
     if (url.searchParams.get('mini') === '1') {
       document.body.classList.add('mini');
-      // Apply theme from URL param (set by main.js at window creation).
+      // Apply theme from URL param.
       var theme = url.searchParams.get('theme');
       if (theme && typeof window.setTheme === 'function') {
         window.setTheme(theme);
       } else if (theme) {
         document.documentElement.dataset.theme = theme;
+      }
+      // Show close button — clicking closes the mini-player window.
+      var closeBtn = document.getElementById('miniCloseBtn');
+      if (closeBtn) {
+        closeBtn.style.display = 'block';
+        closeBtn.addEventListener('click', function() { window.close(); });
       }
     }
   } catch (e) { /* ignore */ }
@@ -1879,6 +1881,63 @@ if ('serviceWorker' in navigator && !window.resonance) {
     // assume the library now reflects what's on disk. Reset badge text.
     badge.textContent = 'Library outdated · Scan';
   }, 4000);
+})();
+
+// ─── Close confirmation modal (v3.17.4) ───────────────────────────────────
+(function setupCloseModal() {
+  if (!window.resonance || !window.resonance.onCloseRequested) return;
+  var modal = document.getElementById('closeModal');
+  var btnTray = document.getElementById('closeModalTray');
+  var btnQuit = document.getElementById('closeModalQuit');
+  if (!modal || !btnTray || !btnQuit) return;
+  window.resonance.onCloseRequested(function() {
+    modal.style.display = 'flex';
+  });
+  btnTray.addEventListener('click', function() {
+    modal.style.display = 'none';
+    window.resonance.closeConfirm('tray');
+  });
+  btnQuit.addEventListener('click', function() {
+    modal.style.display = 'none';
+    window.resonance.closeConfirm('quit');
+  });
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+})();
+
+// ─── JS window drag (CSS -webkit-app-region broken on this user's setup) ──
+// Pure JS implementation: mousedown on header → track mouse delta → move
+// window via IPC. No CSS app-region dependency whatsoever.
+(function setupJsDrag() {
+  if (typeof document === 'undefined') return;
+  if (!(window.resonance && window.resonance.isElectron)) return;
+  var header = document.querySelector('header');
+  if (!header) return;
+  var dragging = false;
+  var startX = 0, startY = 0;
+
+  header.addEventListener('mousedown', function(e) {
+    // Only drag from empty header area, not from buttons/inputs/pills.
+    if (e.target.closest('button, input, select, .server-pill, .window-controls, .mode-toggle, .header-right span[id]')) return;
+    dragging = true;
+    startX = e.screenX;
+    startY = e.screenY;
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    var dx = e.screenX - startX;
+    var dy = e.screenY - startY;
+    if (dx === 0 && dy === 0) return;
+    startX = e.screenX;
+    startY = e.screenY;
+    if (window.resonance && window.resonance.moveWindow) {
+      window.resonance.moveWindow(dx, dy);
+    }
+  });
+
+  document.addEventListener('mouseup', function() { dragging = false; });
 })();
 
 // ─── Mini-player via double-click on cover (v3.17.1) ──────────────────────

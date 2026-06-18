@@ -173,16 +173,11 @@ ipcMain.handle('app:restart-update', () => {
   autoUpdater.quitAndInstall();
 });
 
-// JS-driven window drag — CSS -webkit-app-region:drag can be unreliable
-// on some Electron + Windows combos. This IPC lets the renderer trigger a
-// native title-bar drag from a mousedown on the header.
-ipcMain.handle('window:start-drag', () => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    // Electron >=20 exposes startDrag as a window-position move. The
-    // `moveTop` trick forces the window to the foreground so the drag
-    // feels immediate.
-    try { mainWindow.setMovable(true); } catch (e) { /* ignore */ }
-  }
+// JS-driven window move — renderer sends (dx, dy) deltas on each mousemove.
+ipcMain.handle('window:move', (event, dx, dy) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const [x, y] = mainWindow.getPosition();
+  mainWindow.setPosition(x + dx, y + dy);
 });
 
 // Window controls (frameless)
@@ -193,25 +188,15 @@ ipcMain.handle('window:maximize', () => {
     else mainWindow.maximize();
   }
 });
-ipcMain.handle('window:close', async () => {
-  if (!mainWindow) return;
-  const { dialog } = require('electron');
-  const { response, checkboxChecked } = await dialog.showMessageBox(mainWindow, {
-    type: 'question',
-    buttons: ['Minimize to tray', 'Quit'],
-    defaultId: 0,
-    cancelId: 0,
-    title: 'Close Ghetto Blaster',
-    message: 'Do you want to quit or keep the server running in the background?',
-    detail: 'Quitting disconnects all remote devices.',
-    checkboxLabel: 'Remember this choice',
-  });
-  if (response === 1) {
-    app.isQuitting = true;
-    app.quit();
-  } else {
-    mainWindow.hide();
-  }
+// Close button: send an event to the renderer which shows an in-app
+// confirmation modal. The renderer calls back with the user's choice.
+ipcMain.handle('window:close', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('app:close-requested');
+});
+ipcMain.handle('window:close-confirm', (event, action) => {
+  if (action === 'quit') { app.isQuitting = true; app.quit(); }
+  else if (action === 'tray') { if (mainWindow) mainWindow.hide(); }
 });
 
 // Open Bluetooth settings (Windows)

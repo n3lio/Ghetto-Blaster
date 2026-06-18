@@ -12,9 +12,12 @@ contextBridge.exposeInMainWorld('resonance', {
   // Mini-player toggle
   toggleMiniPlayer: () => ipcRenderer.invoke('miniplayer:toggle'),
 
-  // Window move (JS-based drag fallback for when CSS -webkit-app-region
-  // doesn't work on the user's Electron build).
-  startWindowDrag: () => ipcRenderer.invoke('window:start-drag'),
+  // JS-based window move — delta-based, called from the runtime.js drag handler.
+  moveWindow: (dx, dy) => ipcRenderer.invoke('window:move', dx, dy),
+
+  // Close confirmation flow.
+  onCloseRequested: (cb) => ipcRenderer.on('app:close-requested', () => cb()),
+  closeConfirm: (action) => ipcRenderer.invoke('window:close-confirm', action),
 
   // Drag & drop: resolve the host filesystem path of a dropped File. Modern
   // Electron (>=32) requires going through webUtils — older builds left

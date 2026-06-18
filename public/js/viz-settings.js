@@ -240,7 +240,14 @@ document.getElementById('aboutModal').addEventListener('click', function(e) {
     setTimeout(function() { modal.classList.remove('open', 'closing'); }, 450);
   }
 });
-document.getElementById('settingsBtn').addEventListener('click', openSettings);
+document.getElementById('settingsBtn').addEventListener('click', function() {
+  // Wrap openSettings in a safety net: if the async config fetch throws,
+  // still open the modal so the user isn't stuck with a dead button.
+  openSettings().catch(function(err) {
+    console.error('[gb] openSettings error:', err);
+    settingsModal.classList.add('open');
+  });
+});
 document.getElementById('settingsCancel').addEventListener('click', function() { settingsModal.classList.remove('open'); });
 document.getElementById('settingsClose').addEventListener('click', function() { settingsModal.classList.remove('open'); });
 settingsModal.addEventListener('click', function(e) { if (e.target === settingsModal) settingsModal.classList.remove('open'); });

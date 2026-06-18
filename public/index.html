@@ -14,6 +14,21 @@
 </head>
 <body>
 
+<!-- Close confirmation modal (in-app, themed) -->
+<div class="modal-overlay" id="closeModal" style="display:none;">
+  <div class="modal" style="max-width:380px;text-align:center;padding:28px;">
+    <h3 style="margin-bottom:14px;">Close Ghetto Blaster?</h3>
+    <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:20px;">Quitting stops the server and disconnects all remote devices.</p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button id="closeModalTray" class="add-folder-btn">Minimize to tray</button>
+      <button id="closeModalQuit" class="add-folder-btn" style="background:var(--red);color:#fff;border-color:var(--red);">Quit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mini-player close button (injected in mini mode only by runtime.js) -->
+<button id="miniCloseBtn" style="display:none;position:fixed;top:6px;right:8px;z-index:10000;background:rgba(0,0,0,0.5);border:none;border-radius:50%;width:20px;height:20px;color:#fff;font-size:12px;cursor:pointer;line-height:20px;text-align:center;" title="Close mini-player">×</button>
+
 <!-- Onboarding overlay — revealed by runtime.js when appropriate.
      Two variants: desktop (#onboardingDesktop) and mobile (#onboardingMobile).
      Only one is shown at a time. Dismissal is persisted in localStorage so
@@ -145,7 +160,6 @@
               <span class="vm-color-swatch" data-hue="140" style="background:hsl(140,80%,55%);"></span>
               <span class="vm-color-swatch" data-hue="30" style="background:hsl(30,80%,55%);"></span>
               <span class="vm-color-swatch" data-hue="270" style="background:hsl(270,80%,55%);"></span>
-              <button class="vm-color-picker" title="More colors (opens Settings)">⚙</button>
             </div>
           </div>
 

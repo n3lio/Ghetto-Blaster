@@ -2055,6 +2055,10 @@ html[data-theme="auto"] .np-track-info {
 .viz-menu {
   min-width: 200px !important;
   padding: 8px !important;
+  /* Anchor to the right edge of .viz-gear (which is position:absolute
+     itself) so opening the menu doesn't shift the gear button. */
+  right: 0 !important;
+  left: auto !important;
 }
 .vm-group { margin-bottom: 6px; }
 .vm-group:last-child { margin-bottom: 0; }
@@ -2093,9 +2097,9 @@ html[data-theme="auto"] .np-track-info {
 }
 .vm-toggle.off .vm-dot { background: var(--red); }
 
-/* Mode pills */
+/* Mode pills — must NOT wrap to the next line */
 .vm-mode-row, .vm-color-row {
-  flex-wrap: wrap;
+  flex-wrap: nowrap !important;
   gap: 6px !important;
 }
 .vm-mode-label { font-size: 0.68rem; color: var(--text-dim); flex: 0 0 38px; }
