@@ -113,6 +113,12 @@
       position: relative;
       cursor: default;
       transition: letter-spacing 0.2s;
+      /* Make the h1 fill all the horizontal space between the title text
+         and .header-right so the entire middle area of the header bar is
+         a drag zone. Without flex:1 the h1 only wraps the text content
+         (~90px) and the rest of the header is covered by the .header-right
+         children's no-drag, leaving nowhere to grab on narrow windows. */
+      flex: 1;
     }
     header h1 b { font-weight: 800; }
     header h1:hover {
@@ -1928,11 +1934,12 @@ html[data-theme="auto"] .np-track-info {
   color: var(--accent);
   border-color: var(--accent);
 }
-#toggleNpRow svg {
+.np-toggle-icon {
   transition: transform 0.2s ease;
 }
-#toggleNpRow.active svg {
-  /* Arrow pointing down when in collapsed mode (click to expand back). */
+/* When the panel IS collapsed, the icon points DOWN (click to expand
+   downward). When not collapsed, points UP (click to compact/collapse). */
+.panel#panel-nowplaying.np-collapsed .np-toggle-icon {
   transform: rotate(180deg);
 }
 
@@ -1962,3 +1969,24 @@ html[data-theme="auto"] .np-track-info {
   flex-wrap: wrap !important;
   gap: 8px !important;
 }
+
+/* ─── v3.16.2 fixes ─────────────────────────────────────────────────── */
+
+/* Sleep custom field: constrained width + inline with 'min' + Cancel. */
+.sleep-custom-input {
+  width: 52px !important;
+  padding: 6px 8px !important;
+}
+
+/* Win-btn symbols alignment — center the text vertically. */
+.win-btn {
+  font-size: 10px;
+  line-height: 13px;
+  text-align: center;
+  font-family: system-ui, sans-serif;
+  color: rgba(0,0,0,0.7);
+}
+.win-btn.close { font-size: 12px; line-height: 12px; }
+
+/* About '?' button: nudge text up 1px. */
+#shortcutsBtn { padding-bottom: 1px; }

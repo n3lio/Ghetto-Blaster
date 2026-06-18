@@ -120,7 +120,7 @@ function fetchStats() {
       '<div class="stat-card"><div class="stat-value">' + (s.favorites || 0) + '</div><div class="stat-label">Favorites</div></div>';
 
     if (!topArtists.length) {
-      document.getElementById('statsArtists').innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);">No listening data yet — play some tracks!</p>';
+      document.getElementById('statsArtists').innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);">Stats populate as you listen — check back after a few tracks.</p>';
     } else {
       var maxArtist = topArtists[0].count;
       document.getElementById('statsArtists').innerHTML = topArtists.map(function(a, i) {
@@ -129,7 +129,7 @@ function fetchStats() {
     }
 
     if (!topGenres.length) {
-      document.getElementById('statsGenres').innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);">No listening data yet — play some tracks!</p>';
+      document.getElementById('statsGenres').innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);">Stats populate as you listen — check back after a few tracks.</p>';
     } else {
       var maxGenre = topGenres[0].count;
       document.getElementById('statsGenres').innerHTML = topGenres.map(function(g, i) {
@@ -797,6 +797,107 @@ if ('serviceWorker' in navigator && !window.resonance) {
       document.body.classList.add('mini');
     }
   } catch (e) { /* ignore */ }
+})();
+
+// ─── Volume normalization (on by default, v3.16.2) ─────────────────────────
+// Boosts quiet tracks to match louder ones. Uses audio.volume as a simple
+// gain: we measure the peak in the first 5s of a track via AnalyserNode
+// and if it's below a target (-14 dBFS), we multiply audio.volume by the
+// ratio needed to reach the target. Capped at 2× to avoid extreme boost
+// on silence-heavy intros. Disabled during crossfade-triggered ramps.
+//
+// This does NOT compress — it just applies a static gain per track, like
+// ReplayGain but computed on-the-fly from the actual audio signal when no
+// RG tag is available.
+(function setupVolumeNormalization() {
+  var audioEl = document.querySelector('audio');
+  if (!audioEl) return;
+  var TARGET_PEAK = 0.5; // linear target ~ -6 dBFS (comfortable level)
+  var MAX_BOOST = 2.0;
+  var currentBoost = 1;
+  var measuring = false;
+  var measuredSrc = '';
+
+  function isEnabled() {
+    var cfg = window._appConfig || {};
+    return cfg.normalize !== false; // on by default
+  }
+  function userVolume() {
+    var cfg = window._appConfig || {};
+    return typeof cfg.volume === 'number' ? cfg.volume : 1;
+  }
+  function applyBoost() {
+    if (!isEnabled() || window.crossfadeTriggered) { currentBoost = 1; return; }
+    audioEl.volume = Math.min(1, userVolume() * currentBoost);
+  }
+
+  // Measure peak over the first few seconds of playback using the viz
+  // analyser (already connected in the audio graph). If no analyser is
+  // available, fall back to no boost.
+  function measurePeak() {
+    if (measuring) return;
+    var analyser = window.viz && window.viz.analyser;
+    if (!analyser) { currentBoost = 1; applyBoost(); return; }
+    measuring = true;
+    var peakSamples = 0;
+    var maxSample = 0;
+    var frames = 0;
+    var maxFrames = 60 * 3; // ~3s at 60fps
+    var buf = new Uint8Array(analyser.frequencyBinCount);
+    function tick() {
+      if (!measuring) return;
+      frames++;
+      analyser.getByteTimeDomainData(buf);
+      for (var i = 0; i < buf.length; i++) {
+        var s = Math.abs(buf[i] - 128) / 128;
+        if (s > maxSample) maxSample = s;
+        peakSamples++;
+      }
+      if (frames < maxFrames && audioEl.src === measuredSrc && !audioEl.paused) {
+        requestAnimationFrame(tick);
+      } else {
+        measuring = false;
+        if (maxSample < 0.01) { currentBoost = 1; applyBoost(); return; }
+        // Compute boost to bring the peak up to TARGET_PEAK.
+        var needed = TARGET_PEAK / maxSample;
+        currentBoost = Math.min(MAX_BOOST, Math.max(1, needed));
+        applyBoost();
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  audioEl.addEventListener('loadstart', function() {
+    currentBoost = 1;
+    measuredSrc = audioEl.src;
+  });
+  audioEl.addEventListener('play', function() {
+    if (!isEnabled()) return;
+    // Slight delay so the analyser has data.
+    setTimeout(function() {
+      if (audioEl.src === measuredSrc && !audioEl.paused) measurePeak();
+    }, 300);
+  });
+
+  // Wire the Settings checkbox.
+  function wireCheckbox() {
+    var cb = document.getElementById('settingsNormalize');
+    if (!cb || cb._normWired) return;
+    cb._normWired = true;
+    var cfg = window._appConfig || {};
+    cb.checked = cfg.normalize !== false;
+    cb.addEventListener('change', function() {
+      var c = window._appConfig = window._appConfig || {};
+      c.normalize = cb.checked;
+      if (window.resonance && window.resonance.setConfig) {
+        window.resonance.setConfig({ normalize: cb.checked });
+      }
+      if (!cb.checked) { currentBoost = 1; audioEl.volume = userVolume(); }
+    });
+  }
+  var settingsBtn = document.getElementById('settingsBtn');
+  if (settingsBtn) settingsBtn.addEventListener('click', function() { setTimeout(wireCheckbox, 50); });
+  setTimeout(wireCheckbox, 1500);
 })();
 
 // ─── ReplayGain (opt-in) ───────────────────────────────────────────────────

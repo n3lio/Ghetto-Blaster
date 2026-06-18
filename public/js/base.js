@@ -88,7 +88,7 @@ function getTrack(id) { return trackCache[id] || null; }
 // Genre → color mapping (semantic colors)
 var GENRE_COLORS = [
   // First-match wins: list more specific terms before generic ones.
-  { match: ['french rap','rap français','rap francais','rap fr','french hip-hop','french hip hop'], color: '#1e40af', bg: 'rgba(30,64,175,0.16)' }, // deep navy (bleu France marine, distinct from Electro)
+  { match: ['french rap','rap français','rap francais','rap fr','french hip-hop','french hip hop'], color: '#5b8def', bg: 'rgba(91,141,239,0.14)' }, // bleu France mid-tone (readable on dark bg, distinct from Electro cyan)
   { match: ['hip-hop','hiphop','rap','hip hop'], color: '#9b59b6', bg: 'rgba(155,89,182,0.12)' }, // purple
   { match: ['rock','punk','metal','grunge','hard rock'], color: '#e05555', bg: 'rgba(224,85,85,0.12)' }, // red
   { match: ['electro','electronic','edm','house','techno','trance','dubstep'], color: '#06b6d4', bg: 'rgba(6,182,212,0.14)' }, // cyan (was steel blue, now distinct from Rap FR)

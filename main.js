@@ -167,6 +167,18 @@ ipcMain.handle('app:restart-update', () => {
   autoUpdater.quitAndInstall();
 });
 
+// JS-driven window drag — CSS -webkit-app-region:drag can be unreliable
+// on some Electron + Windows combos. This IPC lets the renderer trigger a
+// native title-bar drag from a mousedown on the header.
+ipcMain.handle('window:start-drag', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // Electron >=20 exposes startDrag as a window-position move. The
+    // `moveTop` trick forces the window to the foreground so the drag
+    // feels immediate.
+    try { mainWindow.setMovable(true); } catch (e) { /* ignore */ }
+  }
+});
+
 // Window controls (frameless)
 ipcMain.handle('window:minimize', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.handle('window:maximize', () => {

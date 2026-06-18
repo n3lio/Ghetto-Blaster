@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('resonance', {
   // Mini-player toggle
   toggleMiniPlayer: () => ipcRenderer.invoke('miniplayer:toggle'),
 
+  // Window move (JS-based drag fallback for when CSS -webkit-app-region
+  // doesn't work on the user's Electron build).
+  startWindowDrag: () => ipcRenderer.invoke('window:start-drag'),
+
   // Drag & drop: resolve the host filesystem path of a dropped File. Modern
   // Electron (>=32) requires going through webUtils — older builds left
   // file.path populated, but we plan to track Electron HEAD.
