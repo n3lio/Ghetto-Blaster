@@ -165,14 +165,14 @@
 
           <!-- ─── Sub-menus (open to the LEFT) ────────────────── -->
           <div class="vm-sub" id="vmShapeSub">
-            <div class="vm-item" data-viz="nebula">Nebula</div>
-            <div class="vm-item" data-viz="glow">Glow</div>
             <div class="vm-item active" data-viz="drift">Drift</div>
             <div class="vm-item" data-viz="wave">Wave</div>
-            <div class="vm-item" data-viz="starfield">Starfield</div>
+            <div class="vm-item" data-viz="nebula">Nebula</div>
+            <div class="vm-item" data-viz="glow">Glow</div>
             <div class="vm-item" data-viz="bars">Bars</div>
-            <div class="vm-item" data-viz="spectrum">Spectrum</div>
             <div class="vm-item" data-viz="circular">Circular</div>
+            <div class="vm-item" data-viz="spectrum">Spectrum</div>
+            <div class="vm-item" data-viz="starfield">Starfield</div>
             <div class="vm-item" data-viz="text">Text</div>
           </div>
           <div class="vm-sub" id="vmPaletteSub">
@@ -408,42 +408,6 @@
       <button class="add-folder-btn" id="addFolderBtn">+ Add folder</button>
     </div>
 
-    <!-- ─── Playback ────────────────────────────────────────────────── -->
-    <div class="settings-section">
-      <h4>Playback</h4>
-      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">Audio output</label>
-      <select id="settingsAudioOutput" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);font-size:0.83rem;margin-bottom:14px;">
-        <option value="">Default</option>
-      </select>
-
-      <!-- Crossfade removed in v3.16.2 (user feedback: not convincing). -->
-      <input type="checkbox" id="settingsCrossfade" style="display:none;">
-      <div id="crossfadeDuration" style="display:none;"><input type="range" id="settingsCrossfadeDur" min="1" max="8" value="3"></div>
-
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-        <input type="checkbox" id="settingsNormalize" style="width:16px;height:16px;accent-color:var(--accent);">
-        <span>Volume normalization (experimental)</span>
-      </label>
-      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0 24px;">Boost quiet tracks to match louder ones. May cause the volume slider to jump — disable if you notice unexpected volume changes.</p>
-
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:12px;">
-        <input type="checkbox" id="settingsGapless" style="width:16px;height:16px;accent-color:var(--accent);">
-        <span>Gapless playback</span>
-      </label>
-      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 14px 24px;">Preloads the next track for seamless transitions. Best for live albums and DJ sets.</p>
-
-      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Sleep timer</label>
-      <div class="sleep-timer-row">
-        <button class="sleep-preset" data-min="30">30 min</button>
-        <button class="sleep-preset" data-min="60">1 h</button>
-        <button class="sleep-preset" data-min="120">2 h</button>
-        <input type="text" inputmode="numeric" id="sleepCustomMin" placeholder="Custom" class="sleep-custom-input">
-        <span class="sleep-custom-suffix">min</span>
-        <button id="sleepCancelBtn" class="sleep-cancel">Cancel</button>
-      </div>
-      <p id="sleepTimerStatus" style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 0;">No timer set</p>
-    </div>
-
     <!-- ─── Appearance ──────────────────────────────────────────────── -->
     <div class="settings-section">
       <h4>Appearance</h4>
@@ -486,6 +450,42 @@
           <option value="cover">Cover</option>
         </select>
       </div>
+    </div>
+
+    <!-- ─── Playback ────────────────────────────────────────────────── -->
+    <div class="settings-section">
+      <h4>Playback</h4>
+      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:4px;">Audio output</label>
+      <select id="settingsAudioOutput" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);font-size:0.83rem;margin-bottom:14px;">
+        <option value="">Default</option>
+      </select>
+
+      <!-- Crossfade removed in v3.16.2 (user feedback: not convincing). -->
+      <input type="checkbox" id="settingsCrossfade" style="display:none;">
+      <div id="crossfadeDuration" style="display:none;"><input type="range" id="settingsCrossfadeDur" min="1" max="8" value="3"></div>
+
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="settingsNormalize" style="width:16px;height:16px;accent-color:var(--accent);">
+        <span>Volume normalization (experimental)</span>
+      </label>
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0 24px;">Boost quiet tracks to match louder ones. May cause the volume slider to jump — disable if you notice unexpected volume changes.</p>
+
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:12px;">
+        <input type="checkbox" id="settingsGapless" style="width:16px;height:16px;accent-color:var(--accent);">
+        <span>Gapless playback</span>
+      </label>
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 14px 24px;">Preloads the next track for seamless transitions. Best for live albums and DJ sets.</p>
+
+      <label style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Sleep timer</label>
+      <div class="sleep-timer-row">
+        <button class="sleep-preset" data-min="30">30 min</button>
+        <button class="sleep-preset" data-min="60">1 h</button>
+        <button class="sleep-preset" data-min="120">2 h</button>
+        <input type="text" inputmode="numeric" id="sleepCustomMin" placeholder="—" class="sleep-custom-input">
+        <span class="sleep-custom-suffix">min</span>
+        <button id="sleepCancelBtn" class="sleep-cancel">Cancel</button>
+      </div>
+      <p id="sleepTimerStatus" style="font-size:0.7rem;color:var(--text-dim);margin:6px 0 0;">No timer set</p>
     </div>
 
     <!-- ─── Sharing & Network ───────────────────────────────────────── -->

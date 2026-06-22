@@ -43,9 +43,24 @@ body {
 .controls .play-btn { width: 36px; height: 36px; background: var(--accent); color: #0a0a0b; }
 .controls .play-btn:hover { filter: brightness(1.1); }
 .progress {
-  height: 3px; background: #2a2725; flex-shrink: 0;
+  height: 5px; background: #2a2725; flex-shrink: 0; cursor: pointer; position: relative;
 }
 .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s linear; }
+.time-display {
+  position: absolute; bottom: 8px; right: 10px;
+  font-size: 0.6rem; color: rgba(240,235,228,0.7);
+  pointer-events: none;
+}
+/* Light mode */
+body.light { background: #fafaf7; color: #1a1714; }
+body.light .overlay { background: linear-gradient(transparent 40%, rgba(255,255,255,0.9) 100%); }
+body.light .title { color: #1a1714; }
+body.light .artist { color: #5a534d; }
+body.light .controls button { color: #1a1714; }
+body.light .controls .play-btn { color: #fafaf7; }
+body.light .progress { background: #d8d4cd; }
+body.light .close-btn { background: rgba(255,255,255,0.7); color: #1a1714; }
+body.light .time-display { color: rgba(26,23,20,0.6); }
 .close-btn {
   position: absolute; top: 6px; right: 6px; z-index: 10;
   width: 18px; height: 18px; border-radius: 50%;
@@ -73,7 +88,8 @@ body {
     </div>
   </div>
 </div>
-<div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+<div class="progress" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+<span class="time-display" id="timeDisplay">0:00 / 0:00</span>
 
 <script>
 // Auth token from URL.
@@ -138,14 +154,43 @@ function updateUI(d) {
     var url = '/api/cover/' + d.trackId + (token ? '?t=' + encodeURIComponent(token) : '');
     document.getElementById('cover').style.backgroundImage = 'url(' + url + ')';
   }
-  // Progress.
+  // Progress + time display.
+  currentDuration = d.duration || 0;
+  currentProgress = d.progress || 0;
   if (d.duration > 0) {
     var pct = Math.min(100, (d.progress / d.duration) * 100);
     document.getElementById('progressFill').style.width = pct + '%';
   }
+  function fmt(s) { var m=Math.floor(s/60); return m+':'+String(Math.floor(s%60)).padStart(2,'0'); }
+  document.getElementById('timeDisplay').textContent = fmt(currentProgress) + ' / ' + fmt(currentDuration);
   // Accent hue from theme.
   if (d.hue != null) document.documentElement.style.setProperty('--hue', d.hue);
 }
+
+// Seek on progress bar click.
+var currentDuration = 0, currentProgress = 0;
+document.getElementById('progressBar').addEventListener('click', function(e) {
+  if (!currentDuration) return;
+  var rect = this.getBoundingClientRect();
+  var pct = (e.clientX - rect.left) / rect.width;
+  var seekTo = pct * currentDuration;
+  cmd('seek');
+  // Use the dedicated seek command with position.
+  fetch('/api/remote/command', {
+    method: 'POST', headers: Object.assign({'Content-Type':'application/json'}, headers),
+    body: JSON.stringify({ command: 'seek', position: seekTo })
+  }).catch(function(){});
+});
+
+// Light mode detection from URL param or OS preference.
+(function() {
+  var params = new URLSearchParams(location.search);
+  var theme = params.get('theme');
+  if (theme === 'light') document.body.classList.add('light');
+  else if (theme === 'auto' && window.matchMedia('(prefers-color-scheme: light)').matches) {
+    document.body.classList.add('light');
+  }
+})();
 
 // Drag (JS-based).
 var dragStart = null;

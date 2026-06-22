@@ -319,7 +319,12 @@ async function openSettings() {
   settingsModal.classList.add('open');
   if (window.resonance) {
     var cfg;
-    try { cfg = await window.resonance.getConfig(); } catch(e) { cfg = window._appConfig || {}; }
+    try { cfg = await window.resonance.getConfig(); } catch(e) { cfg = {}; }
+    // Merge with any previously known _appConfig so folders are never empty
+    // just because one fetch threw.
+    if (!cfg.musicFolders || !cfg.musicFolders.length) {
+      cfg = Object.assign({}, window._appConfig || {}, cfg);
+    }
     settingsFolders = cfg.musicFolders || [];
     // Snapshot the folders the user opened the modal with, so saveSettings
     // can detect a real change. _appConfig was sometimes empty when the

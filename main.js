@@ -266,7 +266,8 @@ function toggleMiniPlayer() {
   // token so the mini-player can call /api/* and connect to the WS.
   const cfg = getConfig() || {};
   const token = cfg.authToken || '';
-  miniWindow.loadURL(`http://localhost:${serverPort}/mini.html?t=${encodeURIComponent(token)}`);
+  const theme = cfg.theme || 'auto';
+  miniWindow.loadURL(`http://localhost:${serverPort}/mini.html?t=${encodeURIComponent(token)}&theme=${theme}`);
   miniWindow.on('closed', () => { miniWindow = null; });
 }
 

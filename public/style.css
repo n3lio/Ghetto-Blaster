@@ -10,8 +10,8 @@
       --text: #f0ebe4;
       --text-muted: #9a918a;
       --text-dim: #6b6360;
-      --accent: hsl(var(--hue), 80%, 55%);
-      --accent-hover: hsl(var(--hue), 85%, 62%);
+      --accent: hsl(var(--hue), 80%, 62%);
+      --accent-hover: hsl(var(--hue), 85%, 70%);
       --accent-glow: hsla(var(--hue), 80%, 55%, 0.15);
       --accent-subtle: hsla(var(--hue), 80%, 55%, 0.08);
       --rose: #c47a7a;
@@ -2058,8 +2058,10 @@ html[data-theme="auto"] .np-track-info {
 .viz-menu {
   min-width: 200px !important;
   padding: 8px !important;
-  /* Anchor to the right edge of .viz-gear (which is position:absolute
-     itself) so opening the menu doesn't shift the gear button. */
+  /* Open ABOVE and anchored to the RIGHT edge of the gear button. */
+  position: absolute !important;
+  bottom: calc(100% + 6px) !important;
+  top: auto !important;
   right: 0 !important;
   left: auto !important;
 }
@@ -2156,8 +2158,7 @@ html[data-theme="auto"] .np-track-info {
   box-shadow: -8px 4px 24px rgba(0,0,0,0.4);
 }
 .vm-sub.open { display: block; }
-/* Position sub near the parent item that triggered it. */
-.viz-menu { position: relative; }
+/* Sub-menus position relative to the viz-menu (which is already absolute). */
 
 /* ─── v3.17.3: volume bar = same thickness as progress bar, thumb centered */
 #volumeSlider {
