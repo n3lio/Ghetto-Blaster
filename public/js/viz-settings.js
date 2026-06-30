@@ -112,27 +112,23 @@ try { (function setupNewVizMenu() {
     syncVizToggle();
   });
 
-  // Toggle track info overlay visibility — with visible ✓ state.
+  // Toggle track info overlay — uses body classes so the toggles are
+  // INDEPENDENT and work even before the radio button is dynamically
+  // injected by runtime.js. CSS handles the actual hide/show via
+  // body.hide-track-info-text and body.hide-radio-btn.
   var infoToggle = document.getElementById('vmToggleInfo');
   if (infoToggle) infoToggle.addEventListener('click', function(e) {
     e.stopPropagation();
-    var el = document.getElementById('npTrackInfo');
-    if (!el) return;
-    var hidden = el.style.display === 'none';
-    el.style.display = hidden ? '' : 'none';
-    infoToggle.dataset.checked = hidden ? 'true' : 'false';
+    var on = !document.body.classList.contains('hide-track-info-text');
+    document.body.classList.toggle('hide-track-info-text', on);
+    infoToggle.dataset.checked = on ? 'false' : 'true';
   });
-  // Toggle radio button visibility — with visible ✓ state.
   var radioToggle = document.getElementById('vmToggleRadio');
   if (radioToggle) radioToggle.addEventListener('click', function(e) {
     e.stopPropagation();
-    // The radio button is .np-radio-btn (appended inside .np-track-info by
-    // runtime.js); query it dynamically each time.
-    var el = document.querySelector('.np-radio-btn');
-    if (!el) return;
-    var hidden = el.style.display === 'none';
-    el.style.display = hidden ? '' : 'none';
-    radioToggle.dataset.checked = hidden ? 'true' : 'false';
+    var on = !document.body.classList.contains('hide-radio-btn');
+    document.body.classList.toggle('hide-radio-btn', on);
+    radioToggle.dataset.checked = on ? 'false' : 'true';
   });
 
   // Mini-player toggle.
@@ -427,44 +423,51 @@ async function openSettings() {
     document.getElementById('settingsCrossfadeDur').value = cfg.crossfadeDuration || 3;
     document.getElementById('crossfadeVal').textContent = cfg.crossfadeDuration || 3;
     document.getElementById('crossfadeDuration').style.display = cfg.crossfade ? 'block' : 'none';
-    var ver = await window.resonance.getVersion();
-    document.getElementById('aboutVersion').textContent = 'v' + ver;
-    document.getElementById('settingsVersionLabel').textContent = 'v' + ver;
+    try {
+      var ver = await window.resonance.getVersion();
+      document.getElementById('aboutVersion').textContent = 'v' + ver;
+      document.getElementById('settingsVersionLabel').textContent = 'v' + ver;
+    } catch(e) { /* ignore — leave the existing version label */ }
     document.getElementById('settingsUpdatesSection').style.display = '';
     syncSettingsUpdate();
-
-    // Generate QR code for mobile access (via server API).
-    // Decoupled from the rest of the await chain so a failure here doesn't
-    // stop earlier fields from rendering — and run it on a 0-tick so the
-    // QR fetch doesn't block the modal opening.
-    (function renderQR() {
-      var qrContainer = document.getElementById('qrCode');
-      var qrUrl = document.getElementById('qrUrl');
-      var qrLabel = document.getElementById('qrLabel');
-      if (!qrContainer) return;
-      fetch('/api/qrcode')
-        .then(function(r) { return r.json(); })
-        .then(function(qrData) {
-          if (qrData && qrData.svg) {
-            qrContainer.style.display = 'flex';
-            qrContainer.innerHTML = qrData.svg;
-            if (qrUrl) qrUrl.textContent = qrData.url;
-            if (qrLabel) qrLabel.textContent = 'Scan from your phone to open Ghetto Blaster';
-          } else {
-            qrLabel.textContent = 'QR code: server returned no data';
-          }
-        })
-        .catch(function(e) {
-          console.warn('[gb] QR fetch failed:', e);
-          if (qrLabel) qrLabel.textContent = 'QR code unavailable: ' + (e.message || 'fetch error');
-        });
-    })();
   } else {
     settingsFolders = [];
     document.getElementById('aboutVersion').textContent = 'web mode';
     document.getElementById('settingsUpdatesSection').style.display = 'none';
   }
   renderFolderList();
+
+  // QR code — render UNCONDITIONALLY (outside the resonance branch so it
+  // always runs, even if an earlier await threw). The fetch is fire-and-
+  // forget so a failure here can't affect anything else in the modal.
+  (function renderQR() {
+    var qrContainer = document.getElementById('qrCode');
+    var qrUrl = document.getElementById('qrUrl');
+    var qrLabel = document.getElementById('qrLabel');
+    if (!qrContainer) return;
+    fetch('/api/qrcode')
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(qrData) {
+        if (qrData && qrData.svg) {
+          qrContainer.style.display = 'flex';
+          qrContainer.innerHTML = qrData.svg;
+          // Make sure the SVG inside fills the container nicely.
+          var svg = qrContainer.querySelector('svg');
+          if (svg) { svg.style.width = '180px'; svg.style.height = '180px'; svg.style.display = 'block'; }
+          if (qrUrl) qrUrl.textContent = qrData.url || '';
+          if (qrLabel) qrLabel.textContent = 'Scan from your phone to open Ghetto Blaster';
+        } else {
+          if (qrLabel) qrLabel.textContent = 'QR code: server returned no data';
+        }
+      })
+      .catch(function(e) {
+        console.warn('[gb] QR fetch failed:', e);
+        if (qrLabel) qrLabel.textContent = 'QR code unavailable (' + (e.message || 'fetch error') + ')';
+      });
+  })();
 }
 
 function renderFolderList() {

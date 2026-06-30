@@ -2270,3 +2270,15 @@ html[data-theme="light"] .track-item .track-cover .ph {
     background: linear-gradient(135deg, var(--surface), var(--bg-warm)) !important;
   }
 }
+
+/* ─── v3.17.18: independent toggles for track-info text + radio button ── */
+/* Hide the title/artist/meta but KEEP the radio button visible. */
+body.hide-track-info-text .np-track-title,
+body.hide-track-info-text .np-track-artist,
+body.hide-track-info-text .np-track-meta {
+  display: none !important;
+}
+/* Hide the radio button INDEPENDENTLY. */
+body.hide-radio-btn .np-radio-btn {
+  display: none !important;
+}
