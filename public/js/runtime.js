@@ -231,25 +231,34 @@ function renderHourlyHeatmap(hourlyPattern) {
   var maxCount = 0;
   dayNames.forEach(function(d) { if (hourlyPattern[d]) { maxCount = Math.max.apply(null, hourlyPattern[d].concat([maxCount])); } });
   maxCount = Math.max(1, maxCount);
-  var width = 24 * cellSize + 25 * gap + 50;
-  var height = 7 * cellSize + 8 * gap + 40;
-  var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:auto;"><defs><linearGradient id="heatGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="var(--accent)"/></linearGradient></defs>';
+  // Layout: 42 units of left margin for day labels, then 24 cells.
+  // Font sizes in a stretched viewBox scale visually — keep them SMALL
+  // (7-8 units) so they read as ~0.7rem regardless of container width.
+  var LEFT_MARGIN = 42;
+  var TOP_MARGIN = 28;
+  var width = LEFT_MARGIN + 24 * cellSize + 25 * gap + 6;
+  var height = TOP_MARGIN + 7 * cellSize + 8 * gap + 4;
+  var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="xMidYMid meet" style="width:100%;max-width:600px;height:auto;">';
   dayNames.forEach(function(day, dayIdx) {
-    var y = 30 + dayIdx * (cellSize + gap);
-    svg += '<text x="8" y="' + (y + 12) + '" font-size="11" fill="var(--text-dim)" text-anchor="end">' + day + '</text>';
+    var y = TOP_MARGIN + dayIdx * (cellSize + gap);
+    // text-anchor="end" + x at right edge of margin — labels fit inside
+    // LEFT_MARGIN with 4 units of padding from the cells.
+    svg += '<text x="' + (LEFT_MARGIN - 4) + '" y="' + (y + 12) + '" font-size="8" fill="var(--text-dim)" text-anchor="end" font-family="var(--font)">' + day + '</text>';
     var pattern = hourlyPattern[day] || Array(24).fill(0);
     for (var h = 0; h < 24; h++) {
       var count = pattern[h] || 0;
       var intensity = count / maxCount;
-      var x = 50 + h * (cellSize + gap);
+      var x = LEFT_MARGIN + h * (cellSize + gap);
       var hsl = 'hsl(var(--accent-h), var(--accent-s), ' + (50 - intensity * 30) + '%)';
       svg += '<rect x="' + x + '" y="' + y + '" width="' + cellSize + '" height="' + cellSize + '" fill="' + hsl + '" stroke="var(--border)" stroke-width="0.5" class="heatmap-cell" data-hour="' + h + '" data-day="' + esc(day) + '" data-count="' + count + '" style="cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8"/>';
     }
   });
-  svg += '<text x="50" y="25" font-size="10" fill="var(--text-dim)" text-anchor="middle">0</text>';
-  svg += '<text x="' + (50 + 6 * (cellSize + gap)) + '" y="25" font-size="10" fill="var(--text-dim)" text-anchor="middle">6</text>';
-  svg += '<text x="' + (50 + 12 * (cellSize + gap)) + '" y="25" font-size="10" fill="var(--text-dim)" text-anchor="middle">12</text>';
-  svg += '<text x="' + (50 + 18 * (cellSize + gap)) + '" y="25" font-size="10" fill="var(--text-dim)" text-anchor="middle">18</text>';
+  // Hour labels: center on the cell at hour h. Same small font as day
+  // labels so both axes read consistently.
+  [0, 6, 12, 18].forEach(function(h) {
+    var cx = LEFT_MARGIN + h * (cellSize + gap) + cellSize / 2;
+    svg += '<text x="' + cx + '" y="22" font-size="8" fill="var(--text-dim)" text-anchor="middle" font-family="var(--font)">' + h + '</text>';
+  });
   svg += '</svg>';
   container.innerHTML = svg;
   // Add tooltip listener
