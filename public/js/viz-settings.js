@@ -96,6 +96,21 @@ try { (function setupNewVizMenu() {
     syncVizToggle();
   });
 
+  // Toggle track info overlay visibility.
+  var infoToggle = document.getElementById('vmToggleInfo');
+  if (infoToggle) infoToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var el = document.getElementById('npTrackInfo');
+    if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  });
+  // Toggle radio button visibility.
+  var radioToggle = document.getElementById('vmToggleRadio');
+  if (radioToggle) radioToggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var el = document.getElementById('startRadioBtn');
+    if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  });
+
   // Mini-player toggle.
   var miniToggle = document.getElementById('vmMiniToggle');
   var miniActive = false;

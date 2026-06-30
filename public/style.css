@@ -666,7 +666,7 @@
     }
 
     /* ─── Visualizer (inside np-viz-side) ─── */
-    .viz-gear { position: absolute; top: 8px; right: 10px; z-index: 10; width: 28px; height: 28px; overflow: visible; }
+    .viz-gear { position: absolute; top: 8px; left: 10px; z-index: 10; width: 28px; height: 28px; overflow: visible; }
     .viz-gear-btn {
       width: 28px; height: 28px; border-radius: 50%;
       border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.6);
@@ -676,9 +676,8 @@
     .viz-gear-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
     .viz-menu {
       display: none; position: absolute;
-      /* Open ABOVE and to the LEFT of the gear button so it doesn't
-         get clipped by the right/bottom edges of the viz panel. */
-      bottom: calc(100% + 6px); right: 0;
+      /* Normal direction: opens below-right from the top-left gear button. */
+      top: calc(100% + 6px); left: 0;
       background: rgba(15,14,13,0.95); backdrop-filter: blur(12px);
       border: 1px solid var(--border); border-radius: var(--radius); padding: 5px; min-width: 130px; z-index: 20;
     }
@@ -2058,12 +2057,12 @@ html[data-theme="auto"] .np-track-info {
 .viz-menu {
   min-width: 200px !important;
   padding: 8px !important;
-  /* Open ABOVE and anchored to the RIGHT edge of the gear button. */
+  /* Normal open: below + to the right from the top-left gear button. */
   position: absolute !important;
-  bottom: calc(100% + 6px) !important;
-  top: auto !important;
-  right: 0 !important;
-  left: auto !important;
+  top: calc(100% + 6px) !important;
+  bottom: auto !important;
+  left: 0 !important;
+  right: auto !important;
 }
 .vm-group { margin-bottom: 6px; }
 .vm-group:last-child { margin-bottom: 0; }
@@ -2143,11 +2142,11 @@ html[data-theme="auto"] .np-track-info {
 }
 .vm-color-picker:hover { border-color: var(--accent); color: var(--accent); }
 
-/* Sub-menus: absolute, open to the LEFT of the parent menu. */
+/* Sub-menus: absolute, open to the RIGHT of the parent menu (normal). */
 .vm-sub {
   display: none;
   position: absolute;
-  right: calc(100% + 6px);
+  left: calc(100% + 6px);
   top: 0;
   min-width: 140px;
   background: var(--surface);
@@ -2155,7 +2154,7 @@ html[data-theme="auto"] .np-track-info {
   border-radius: var(--radius);
   padding: 6px;
   z-index: 30;
-  box-shadow: -8px 4px 24px rgba(0,0,0,0.4);
+  box-shadow: 8px 4px 24px rgba(0,0,0,0.4);
 }
 .vm-sub.open { display: block; }
 /* Sub-menus position relative to the viz-menu (which is already absolute). */
