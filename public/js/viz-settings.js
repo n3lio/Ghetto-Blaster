@@ -341,25 +341,89 @@ function setBadgeStyle(badge, type) {
 function triggerDownload() {
   var badge = document.getElementById('updateBadge');
   var wasError = window._updateState.status === 'error';
+  // After ONE auto-update retry that already failed (wasError), give up
+  // on autoUpdater and open GitHub Releases in the browser. The user
+  // can download the installer manually — which always works.
+  if (wasError && window._updateState._retried) {
+    window.open('https://github.com/n3lio/Ghetto-Blaster/releases/latest', '_blank');
+    return;
+  }
   badge.textContent = wasError ? 'retrying…' : 'downloading…';
   setBadgeStyle(badge, 'downloading');
   badge.onclick = null; badge.style.cursor = 'default';
   window._updateState.status = 'downloading';
+  if (wasError) window._updateState._retried = true;
   syncSettingsUpdate();
   if (wasError) {
-    // After an error, electron-updater needs a fresh check before download
     window._updateState._autoDownload = true;
     window.resonance.checkForUpdates();
   } else {
     window.resonance.downloadUpdate();
   }
+  // Safety: if no download progress lands within 60s, fall back to
+  // opening the GitHub Releases page so the user isn't stuck.
+  setTimeout(function() {
+    if (window._updateState.status === 'downloading') {
+      console.warn('[gb] update download stuck — falling back to GitHub Releases');
+      window.open('https://github.com/n3lio/Ghetto-Blaster/releases/latest', '_blank');
+    }
+  }, 60000);
 }
 
 async function openSettings() {
   // ALWAYS open the modal — even if the config fetch or any sub-step
   // throws, the user must see the panel (possibly with stale values)
-  // rather than a dead button.
+  // rather than a dead button. Also ALWAYS render the QR at the end,
+  // wrapping the whole body in try so a mid-function throw doesn't
+  // skip the QR/folder render.
   settingsModal.classList.add('open');
+  try { await openSettingsInner(); } catch(e) { console.warn('[gb] openSettings inner threw:', e); }
+  renderFolderList();
+  renderQRCode();
+}
+
+function renderQRCode() {
+  var qrContainer = document.getElementById('qrCode');
+  var qrUrl = document.getElementById('qrUrl');
+  var qrLabel = document.getElementById('qrLabel');
+  if (!qrContainer) return;
+  qrLabel.textContent = 'Generating QR…';
+  fetch('/api/qrcode', { credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) {
+        return r.text().then(function(t) {
+          throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 100));
+        });
+      }
+      return r.json();
+    })
+    .then(function(qrData) {
+      if (!qrData || !qrData.svg) {
+        qrLabel.textContent = 'QR endpoint returned no SVG';
+        return;
+      }
+      qrContainer.style.display = 'flex';
+      qrContainer.style.minWidth = '180px';
+      qrContainer.style.minHeight = '180px';
+      qrContainer.innerHTML = qrData.svg;
+      var svg = qrContainer.querySelector('svg');
+      if (svg) {
+        svg.setAttribute('width', '180');
+        svg.setAttribute('height', '180');
+        svg.style.width = '180px';
+        svg.style.height = '180px';
+        svg.style.display = 'block';
+      }
+      if (qrUrl) qrUrl.textContent = qrData.url || '';
+      if (qrLabel) qrLabel.textContent = 'Scan from your phone';
+    })
+    .catch(function(e) {
+      console.warn('[gb] QR fetch failed:', e);
+      qrLabel.textContent = 'QR error: ' + (e && e.message ? e.message : 'unknown');
+    });
+}
+
+async function openSettingsInner() {
   if (window.resonance) {
     var cfg;
     try { cfg = await window.resonance.getConfig(); } catch(e) { cfg = {}; }
@@ -435,50 +499,6 @@ async function openSettings() {
     document.getElementById('aboutVersion').textContent = 'web mode';
     document.getElementById('settingsUpdatesSection').style.display = 'none';
   }
-  renderFolderList();
-
-  // QR code — render UNCONDITIONALLY. Verbose debug shown directly in
-  // the modal so the user can see why it fails.
-  (function renderQR() {
-    var qrContainer = document.getElementById('qrCode');
-    var qrUrl = document.getElementById('qrUrl');
-    var qrLabel = document.getElementById('qrLabel');
-    if (!qrContainer) return;
-    qrLabel.textContent = 'Generating QR…';
-    fetch('/api/qrcode', { credentials: 'same-origin' })
-      .then(function(r) {
-        if (!r.ok) {
-          return r.text().then(function(t) {
-            throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 100));
-          });
-        }
-        return r.json();
-      })
-      .then(function(qrData) {
-        if (!qrData || !qrData.svg) {
-          qrLabel.textContent = 'QR endpoint returned no SVG (got: ' + JSON.stringify(qrData).slice(0, 80) + ')';
-          return;
-        }
-        qrContainer.style.display = 'flex';
-        qrContainer.style.minWidth = '180px';
-        qrContainer.style.minHeight = '180px';
-        qrContainer.innerHTML = qrData.svg;
-        var svg = qrContainer.querySelector('svg');
-        if (svg) {
-          svg.setAttribute('width', '180');
-          svg.setAttribute('height', '180');
-          svg.style.width = '180px';
-          svg.style.height = '180px';
-          svg.style.display = 'block';
-        }
-        if (qrUrl) qrUrl.textContent = qrData.url || '';
-        if (qrLabel) qrLabel.textContent = 'Scan from your phone';
-      })
-      .catch(function(e) {
-        console.warn('[gb] QR fetch failed:', e);
-        qrLabel.textContent = 'QR error: ' + (e && e.message ? e.message : 'unknown');
-      });
-  })();
 }
 
 function renderFolderList() {
