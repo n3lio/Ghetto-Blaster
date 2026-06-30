@@ -219,6 +219,11 @@
     .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
     /* ─── Toolbar ─── */
+    /* Reserve a consistent vertical slot so the Library and Playlists
+       toolbars line up at exactly the same y position when the user
+       switches tabs. Without min-height, button alignment inside the
+       flex row could shift by ±1px depending on the content of each. */
+    .toolbar { min-height: 54px; align-items: center; }
     .toolbar {
       padding: 12px 20px;
       display: flex;
@@ -293,6 +298,12 @@
       font-weight: 500;
       transition: all 0.2s;
       white-space: nowrap;
+      /* Identical height across all toolbar buttons regardless of icon
+         presence (Shuffle All has SVG, New Playlist doesn't). */
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      box-sizing: border-box;
     }
     .toolbar-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-subtle); }
     .toolbar-sep {

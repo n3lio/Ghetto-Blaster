@@ -1796,6 +1796,28 @@ function startServer(port) {
     });
 
     // Theme (for mobile to sync accent color)
+    // Safe public config snapshot for the renderer settings modal.
+    // Exposes user-mutable fields, NEVER the auth token or secrets.
+    app.get('/api/config/public', (req, res) => {
+      res.json({
+        musicFolders: config.musicFolders || [],
+        excludeFolders: config.excludeFolders || [],
+        port: config.port || 3000,
+        hue: config.hue,
+        theme: config.theme,
+        lanEnabled: config.lanEnabled !== false,
+        crossfade: !!config.crossfade,
+        crossfadeDuration: config.crossfadeDuration,
+        gapless: !!config.gapless,
+        normalize: !!config.normalize,
+        npCollapsed: !!config.npCollapsed,
+        vizMode: config.vizMode,
+        vizColorMode: config.vizColorMode,
+        vizEnabled: config.vizEnabled !== false,
+        audioOutput: config.audioOutput || '',
+      });
+    });
+
     app.get('/api/config/theme', (req, res) => {
       res.json({ hue: config.hue != null ? config.hue : 0 });
     });

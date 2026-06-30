@@ -368,10 +368,23 @@ async function openSettings() {
     var cfg;
     try { cfg = await window.resonance.getConfig(); } catch(e) { cfg = {}; }
     // Merge with any previously known _appConfig so folders are never empty
-    // just because one fetch threw.
+    // just because one fetch threw. Also cache the result back into
+    // _appConfig so the NEXT Settings open already has it cached.
     if (!cfg.musicFolders || !cfg.musicFolders.length) {
       cfg = Object.assign({}, window._appConfig || {}, cfg);
     }
+    // Also fall back to the server's /api/config/public if Electron IPC
+    // didn't give us folders (first-boot race). The server holds the
+    // current musicFolders in memory regardless of Electron IPC state.
+    if (!cfg.musicFolders || !cfg.musicFolders.length) {
+      try {
+        var srvCfg = await fetch('/api/config/public').then(function(r) { return r.json(); });
+        if (srvCfg && Array.isArray(srvCfg.musicFolders) && srvCfg.musicFolders.length) {
+          cfg.musicFolders = srvCfg.musicFolders;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    window._appConfig = Object.assign({}, window._appConfig || {}, cfg);
     settingsFolders = cfg.musicFolders || [];
     // Snapshot the folders the user opened the modal with, so saveSettings
     // can detect a real change. _appConfig was sometimes empty when the
