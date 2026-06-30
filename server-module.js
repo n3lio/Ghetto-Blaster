@@ -719,6 +719,9 @@ const clients = new Set();
 // Debounced broadcasts: collapse bursts of the same `type` (e.g. state updates
 // during a big scan) into one delivery per ~80ms. Without this, heavy scans
 // can overwhelm mobile clients with hundreds of WS frames per second.
+// Note: 'preferences:changed' is intentionally NOT debounced so settings sync
+// is immediate even during slider drags; the client-side throttle (200ms)
+// prevents server-side spam.
 const DEBOUNCED_TYPES = new Set(['state', 'desktop:state', 'users:changed']);
 const _pendingBroadcasts = new Map(); // type → { timer, lastMessage }
 
@@ -1901,6 +1904,86 @@ function startServer(port) {
 
     app.get('/api/config/theme', (req, res) => {
       res.json({ hue: config.hue != null ? config.hue : 0 });
+    });
+
+    // ─── Preferences sync (cross-device) ────────────────────────────────────
+    // GET: return the 6 synced preference fields only
+    app.get('/api/config/preferences', (req, res) => {
+      res.json({
+        theme: config.theme || 'auto',
+        hue: config.hue != null ? config.hue : 0,
+        normalize: !!config.normalize,
+        gapless: !!config.gapless,
+        vizMode: config.vizMode || 'glow',
+        vizColorMode: config.vizColorMode || 'cover',
+      });
+    });
+
+    // PUT: accept partial updates to synced preferences, validate, merge, save, broadcast
+    app.put('/api/config/preferences', (req, res) => {
+      const body = req.body || {};
+      const updates = {};
+      let hasChanges = false;
+
+      // Validate and extract each synced field
+      if (body.theme !== undefined) {
+        if (!['auto', 'dark', 'light'].includes(body.theme)) {
+          return res.status(400).json({ error: 'theme must be one of: auto, dark, light' });
+        }
+        updates.theme = body.theme;
+        hasChanges = true;
+      }
+
+      if (body.hue !== undefined) {
+        const hueNum = parseInt(body.hue, 10);
+        if (!Number.isInteger(hueNum) || hueNum < 0 || hueNum > 360) {
+          return res.status(400).json({ error: 'hue must be an integer between 0 and 360' });
+        }
+        updates.hue = hueNum;
+        hasChanges = true;
+      }
+
+      if (body.normalize !== undefined) {
+        if (typeof body.normalize !== 'boolean') {
+          return res.status(400).json({ error: 'normalize must be a boolean' });
+        }
+        updates.normalize = body.normalize;
+        hasChanges = true;
+      }
+
+      if (body.gapless !== undefined) {
+        if (typeof body.gapless !== 'boolean') {
+          return res.status(400).json({ error: 'gapless must be a boolean' });
+        }
+        updates.gapless = body.gapless;
+        hasChanges = true;
+      }
+
+      if (body.vizMode !== undefined) {
+        if (typeof body.vizMode !== 'string' || !body.vizMode.trim()) {
+          return res.status(400).json({ error: 'vizMode must be a non-empty string' });
+        }
+        updates.vizMode = body.vizMode.trim();
+        hasChanges = true;
+      }
+
+      if (body.vizColorMode !== undefined) {
+        if (typeof body.vizColorMode !== 'string' || !body.vizColorMode.trim()) {
+          return res.status(400).json({ error: 'vizColorMode must be a non-empty string' });
+        }
+        updates.vizColorMode = body.vizColorMode.trim();
+        hasChanges = true;
+      }
+
+      // Merge into config and save
+      if (hasChanges) {
+        config = { ...config, ...updates };
+        saveConfig(config);
+        // Broadcast the change to all connected clients
+        broadcast({ type: 'preferences:changed', data: updates });
+      }
+
+      res.json({ ok: true });
     });
 
     // Desktop audio outputs (exposed for mobile remote control)

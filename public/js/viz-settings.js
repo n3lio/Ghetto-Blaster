@@ -1,6 +1,30 @@
 // === viz-settings.js — slice of public/js/main.js (legacy monolith) ===
 // This file is loaded by index.html in a specific order.
 // Do not change the order without auditing dependencies.
+
+// ─── Cross-device preferences sync ──────────────────────────────────────────
+// Throttled (200ms) POST to /api/config/preferences on any local pref change.
+// Used by settings handlers to sync theme, hue, normalize, gapless, vizMode, vizColorMode.
+var _prefsSyncTimer = null;
+var _pendingPrefsUpdate = {};
+
+function syncPreferencesToServer(partialPrefs) {
+  if (window._applyingRemotePrefs) return; // Don't echo back remote updates
+  Object.assign(_pendingPrefsUpdate, partialPrefs);
+  if (_prefsSyncTimer) return; // Already scheduled
+  _prefsSyncTimer = setTimeout(function() {
+    _prefsSyncTimer = null;
+    if (Object.keys(_pendingPrefsUpdate).length > 0) {
+      fetch('/api/config/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(_pendingPrefsUpdate)
+      }).catch(function(e) { console.warn('[gb] preferences sync failed:', e); });
+      _pendingPrefsUpdate = {};
+    }
+  }, 200);
+}
+
 // ─── Visualizer ──────────────────────────────────────────────────────────────
 var vizContainer = document.getElementById('vizContainer');
 var vizCanvas = document.getElementById('vizCanvas');
@@ -172,6 +196,7 @@ try { (function setupNewVizMenu() {
       e.stopPropagation();
       if (typeof window.setTheme === 'function') window.setTheme(pill.dataset.themeMode);
       syncModePills();
+      syncPreferencesToServer({ theme: pill.dataset.themeMode });
       // Sync settings modal if it's open.
       var sel = document.getElementById('settingsThemeMode');
       if (sel) sel.value = pill.dataset.themeMode;
@@ -527,6 +552,7 @@ document.getElementById('addFolderBtn').addEventListener('click', async function
 // Live preview hue
 document.getElementById('settingsHue').addEventListener('input', function(e) {
   document.documentElement.style.setProperty('--hue', e.target.value);
+  syncPreferencesToServer({ hue: parseInt(e.target.value) });
 });
 
 // Download QR as PNG
@@ -599,8 +625,21 @@ async function saveSettings(opts) {
   // Close modal immediately
   settingsModal.classList.remove('open');
 
+  // Sync the 6 cross-device preferences to the server
+  var normalize = document.getElementById('settingsNormalize') && document.getElementById('settingsNormalize').checked;
+  var gapless = document.getElementById('settingsGapless') && document.getElementById('settingsGapless').checked;
+  var themeMode = document.getElementById('settingsThemeMode') && document.getElementById('settingsThemeMode').value || 'auto';
+  syncPreferencesToServer({
+    theme: themeMode,
+    hue: hue,
+    normalize: normalize,
+    gapless: gapless,
+    vizMode: vizMode,
+    vizColorMode: vizColorMode
+  });
+
   if (window.resonance) {
-    window._appConfig = { musicFolders: settingsFolders, vizEnabled: vizVisible, vizMode: vizMode, vizColorMode: vizColorMode, hue: hue, lanEnabled: lanEnabled, audioOutput: audioOutput };
+    window._appConfig = { musicFolders: settingsFolders, vizEnabled: vizVisible, vizMode: vizMode, vizColorMode: vizColorMode, hue: hue, lanEnabled: lanEnabled, audioOutput: audioOutput, normalize: normalize, gapless: gapless, theme: themeMode };
     await window.resonance.setConfig(window._appConfig);
   }
 

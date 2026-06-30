@@ -437,6 +437,54 @@ function remoteAddToQueue(trackId) {
     if (msg.type === 'users:changed' && isDesktop) {
       fetchUsers();
     }
+    // Preferences changed — apply synced settings (without triggering feedback loop)
+    if (msg.type === 'preferences:changed' && msg.data) {
+      window._applyingRemotePrefs = true;
+      var prefs = msg.data;
+      if (prefs.theme !== undefined && typeof window.setTheme === 'function') {
+        window.setTheme(prefs.theme);
+      }
+      if (prefs.hue !== undefined) {
+        document.documentElement.style.setProperty('--hue', prefs.hue);
+        var settingsHue = document.getElementById('settingsHue');
+        if (settingsHue) settingsHue.value = prefs.hue;
+        window._appConfig = window._appConfig || {};
+        window._appConfig.hue = prefs.hue;
+      }
+      if (prefs.normalize !== undefined) {
+        window._appConfig = window._appConfig || {};
+        window._appConfig.normalize = prefs.normalize;
+        var settingsNorm = document.getElementById('settingsNormalize');
+        if (settingsNorm) settingsNorm.checked = prefs.normalize;
+      }
+      if (prefs.gapless !== undefined) {
+        window._appConfig = window._appConfig || {};
+        window._appConfig.gapless = prefs.gapless;
+        var settingsGap = document.getElementById('settingsGapless');
+        if (settingsGap) settingsGap.checked = prefs.gapless;
+      }
+      if (prefs.vizMode !== undefined && window.viz) {
+        window.viz.setMode(prefs.vizMode);
+        window._appConfig = window._appConfig || {};
+        window._appConfig.vizMode = prefs.vizMode;
+        var settingsViz = document.getElementById('settingsVizMode');
+        if (settingsViz) settingsViz.value = prefs.vizMode;
+        document.querySelectorAll('.vm-item').forEach(function(item) {
+          item.classList.toggle('active', item.dataset.mode === prefs.vizMode);
+        });
+      }
+      if (prefs.vizColorMode !== undefined && window.viz) {
+        window.viz.setColorMode(prefs.vizColorMode);
+        window._appConfig = window._appConfig || {};
+        window._appConfig.vizColorMode = prefs.vizColorMode;
+        var settingsColor = document.getElementById('settingsVizColor');
+        if (settingsColor) settingsColor.value = prefs.vizColorMode;
+        document.querySelectorAll('.viz-menu-item[data-color]').forEach(function(item) {
+          item.classList.toggle('active', item.dataset.color === prefs.vizColorMode);
+        });
+      }
+      setTimeout(function() { window._applyingRemotePrefs = false; }, 0);
+    }
     // Remote commands (mobile → desktop)
     if (msg.type === 'remote:command' && isDesktop) {
       var cmd = msg.data.command;
@@ -2225,6 +2273,7 @@ if ('serviceWorker' in navigator && !window.resonance) {
     if (!sel) return;
     sel.addEventListener('change', function() {
       if (typeof window.setTheme === 'function') window.setTheme(sel.value);
+      if (typeof syncPreferencesToServer === 'function') syncPreferencesToServer({ theme: sel.value });
     });
   }
 

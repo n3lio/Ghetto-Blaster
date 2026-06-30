@@ -193,6 +193,56 @@ test('GET /api/_dev/log-tail returns recent entries', async () => {
   assert.equal(typeof res.body.level, 'string');
 });
 
+test('GET /api/config/preferences returns the 6 synced fields', async () => {
+  const res = await request(baseUrl).get('/api/config/preferences').expect(200);
+  assert.equal(typeof res.body, 'object');
+  assert.equal(typeof res.body.theme, 'string');
+  assert.equal(typeof res.body.hue, 'number');
+  assert.equal(typeof res.body.normalize, 'boolean');
+  assert.equal(typeof res.body.gapless, 'boolean');
+  assert.equal(typeof res.body.vizMode, 'string');
+  assert.equal(typeof res.body.vizColorMode, 'string');
+});
+
+test('PUT /api/config/preferences with valid fields persists and returns 200', async () => {
+  const res = await request(baseUrl)
+    .put('/api/config/preferences')
+    .send({ theme: 'dark', hue: 120, normalize: true, gapless: false })
+    .expect(200);
+  assert.equal(res.body.ok, true);
+  // Verify the change persisted by fetching it back
+  const check = await request(baseUrl).get('/api/config/preferences').expect(200);
+  assert.equal(check.body.theme, 'dark');
+  assert.equal(check.body.hue, 120);
+  assert.equal(check.body.normalize, true);
+  assert.equal(check.body.gapless, false);
+});
+
+test('PUT /api/config/preferences rejects invalid theme', async () => {
+  await request(baseUrl)
+    .put('/api/config/preferences')
+    .send({ theme: 'invalid-theme' })
+    .expect(400);
+});
+
+test('PUT /api/config/preferences rejects invalid hue (out of range)', async () => {
+  await request(baseUrl)
+    .put('/api/config/preferences')
+    .send({ hue: 400 })
+    .expect(400);
+});
+
+test('PUT /api/config/preferences silently ignores unknown fields', async () => {
+  const res = await request(baseUrl)
+    .put('/api/config/preferences')
+    .send({ theme: 'light', unknownField: 'should-be-ignored' })
+    .expect(200);
+  assert.equal(res.body.ok, true);
+  // Verify the valid field was saved but unknown was dropped
+  const check = await request(baseUrl).get('/api/config/preferences').expect(200);
+  assert.equal(check.body.theme, 'light');
+});
+
 test('POST /api/_dev/log-level changes the level', async () => {
   const res = await request(baseUrl).post('/api/_dev/log-level').send({ level: 'warn' }).expect(200);
   assert.equal(res.body.ok, true);
