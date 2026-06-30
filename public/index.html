@@ -128,17 +128,14 @@
             <div class="vm-toggle vm-item" id="vmVizToggle" data-action="toggle-viz">
               <span class="vm-dot"></span> <span class="vm-toggle-label">Active</span>
             </div>
-            <div class="vm-item" id="vmToggleInfo" style="cursor:pointer;">
-              <span style="font-size:0.7rem;opacity:0.7;">👁</span> Track info overlay
-            </div>
-            <div class="vm-item" id="vmToggleRadio" style="cursor:pointer;">
-              <span style="font-size:0.7rem;opacity:0.7;">👁</span> Radio button
-            </div>
             <div class="vm-item vm-has-sub" data-sub="vmShapeSub">
               Shape <span class="vm-arrow">›</span>
             </div>
             <div class="vm-item vm-has-sub" data-sub="vmPaletteSub">
               Palette <span class="vm-arrow">›</span>
+            </div>
+            <div class="vm-item vm-has-sub" data-sub="vmOverlaySub">
+              Overlay <span class="vm-arrow">›</span>
             </div>
           </div>
 
@@ -180,6 +177,14 @@
             <div class="vm-item" data-viz="spectrum">Spectrum</div>
             <div class="vm-item" data-viz="starfield">Starfield</div>
             <div class="vm-item" data-viz="text">Text</div>
+          </div>
+          <div class="vm-sub" id="vmOverlaySub">
+            <div class="vm-item vm-check" id="vmToggleInfo" data-checked="true">
+              <span class="vm-check-mark">✓</span> <span>Track info</span>
+            </div>
+            <div class="vm-item vm-check" id="vmToggleRadio" data-checked="true">
+              <span class="vm-check-mark">✓</span> <span>Radio button</span>
+            </div>
           </div>
           <div class="vm-sub" id="vmPaletteSub">
             <div class="vm-item" data-color="theme">Theme (auto)</div>

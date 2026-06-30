@@ -39,21 +39,37 @@ try { (function setupNewVizMenu() {
   var menu = document.getElementById('vizMenu');
   if (!menu) return;
 
-  // Sub-menu show/hide.
+  // Sub-menu show/hide with delayed close so mousing from a parent item
+  // to its sub-menu (or back) doesn't kill it.
+  var hideTimer = null;
+  function openSub(subId, anchorTop) {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
+    var sub = document.getElementById(subId);
+    if (sub) {
+      sub.classList.add('open');
+      if (typeof anchorTop === 'number') sub.style.top = anchorTop + 'px';
+    }
+  }
+  function scheduleClose() {
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = setTimeout(function() {
+      menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
+    }, 180);
+  }
   menu.querySelectorAll('.vm-has-sub').forEach(function(item) {
     item.addEventListener('mouseenter', function() {
-      menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
-      var sub = document.getElementById(item.dataset.sub);
-      if (sub) {
-        sub.classList.add('open');
-        // Position near the triggering item.
-        sub.style.top = (item.offsetTop - menu.scrollTop) + 'px';
-      }
+      openSub(item.dataset.sub, item.offsetTop - menu.scrollTop);
     });
   });
-  menu.addEventListener('mouseleave', function() {
-    menu.querySelectorAll('.vm-sub').forEach(function(s) { s.classList.remove('open'); });
+  // Keep sub-menus open while the mouse is on them.
+  menu.querySelectorAll('.vm-sub').forEach(function(sub) {
+    sub.addEventListener('mouseenter', function() {
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    });
+    sub.addEventListener('mouseleave', scheduleClose);
   });
+  menu.addEventListener('mouseleave', scheduleClose);
 
   // Shape selection.
   menu.querySelectorAll('[data-viz]').forEach(function(item) {
@@ -96,19 +112,27 @@ try { (function setupNewVizMenu() {
     syncVizToggle();
   });
 
-  // Toggle track info overlay visibility.
+  // Toggle track info overlay visibility — with visible ✓ state.
   var infoToggle = document.getElementById('vmToggleInfo');
   if (infoToggle) infoToggle.addEventListener('click', function(e) {
     e.stopPropagation();
     var el = document.getElementById('npTrackInfo');
-    if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+    if (!el) return;
+    var hidden = el.style.display === 'none';
+    el.style.display = hidden ? '' : 'none';
+    infoToggle.dataset.checked = hidden ? 'true' : 'false';
   });
-  // Toggle radio button visibility.
+  // Toggle radio button visibility — with visible ✓ state.
   var radioToggle = document.getElementById('vmToggleRadio');
   if (radioToggle) radioToggle.addEventListener('click', function(e) {
     e.stopPropagation();
-    var el = document.getElementById('startRadioBtn');
-    if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+    // The radio button is .np-radio-btn (appended inside .np-track-info by
+    // runtime.js); query it dynamically each time.
+    var el = document.querySelector('.np-radio-btn');
+    if (!el) return;
+    var hidden = el.style.display === 'none';
+    el.style.display = hidden ? '' : 'none';
+    radioToggle.dataset.checked = hidden ? 'true' : 'false';
   });
 
   // Mini-player toggle.
@@ -130,6 +154,14 @@ try { (function setupNewVizMenu() {
     }
     menu.classList.remove('open');
   });
+  // Listen for the main process telling us the mini-player window closed
+  // (via its × button or any other path) so the toggle reflects reality.
+  if (window.resonance && window.resonance.onMiniPlayerClosed) {
+    window.resonance.onMiniPlayerClosed(function() {
+      miniActive = false;
+      syncMiniToggle();
+    });
+  }
 
   // App > Mode pills.
   function syncModePills() {
@@ -388,23 +420,32 @@ async function openSettings() {
     document.getElementById('settingsUpdatesSection').style.display = '';
     syncSettingsUpdate();
 
-    // Generate QR code for mobile access (via server API)
-    var qrContainer = document.getElementById('qrCode');
-    var qrUrl = document.getElementById('qrUrl');
-    var qrLabel = document.getElementById('qrLabel');
-    try {
-      var qrData = await fetch('/api/qrcode').then(function(r){ return r.json(); });
-      if (qrData.svg) {
-        qrContainer.style.display = 'flex';
-        qrContainer.innerHTML = qrData.svg;
-        qrUrl.textContent = qrData.url;
-        qrLabel.textContent = 'Scan from your phone to open Ghetto Blaster';
-      }
-    } catch(e) {
-      qrContainer.style.display = 'none';
-      qrUrl.textContent = '';
-      qrLabel.textContent = 'QR code unavailable';
-    }
+    // Generate QR code for mobile access (via server API).
+    // Decoupled from the rest of the await chain so a failure here doesn't
+    // stop earlier fields from rendering — and run it on a 0-tick so the
+    // QR fetch doesn't block the modal opening.
+    (function renderQR() {
+      var qrContainer = document.getElementById('qrCode');
+      var qrUrl = document.getElementById('qrUrl');
+      var qrLabel = document.getElementById('qrLabel');
+      if (!qrContainer) return;
+      fetch('/api/qrcode')
+        .then(function(r) { return r.json(); })
+        .then(function(qrData) {
+          if (qrData && qrData.svg) {
+            qrContainer.style.display = 'flex';
+            qrContainer.innerHTML = qrData.svg;
+            if (qrUrl) qrUrl.textContent = qrData.url;
+            if (qrLabel) qrLabel.textContent = 'Scan from your phone to open Ghetto Blaster';
+          } else {
+            qrLabel.textContent = 'QR code: server returned no data';
+          }
+        })
+        .catch(function(e) {
+          console.warn('[gb] QR fetch failed:', e);
+          if (qrLabel) qrLabel.textContent = 'QR code unavailable: ' + (e.message || 'fetch error');
+        });
+    })();
   } else {
     settingsFolders = [];
     document.getElementById('aboutVersion').textContent = 'web mode';

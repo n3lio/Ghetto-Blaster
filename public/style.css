@@ -2142,19 +2142,42 @@ html[data-theme="auto"] .np-track-info {
 }
 .vm-color-picker:hover { border-color: var(--accent); color: var(--accent); }
 
-/* Sub-menus: absolute, open to the RIGHT of the parent menu (normal). */
+/* Sub-menus: absolute, open to the RIGHT of the parent menu (normal).
+   IMPORTANT: left:100% (NO gap) so mousing from the parent item to the
+   sub-menu never crosses transparent space — without this, the sub-menu
+   closed before the user reached it. A 6px transparent left padding gives
+   the sub-menu a small visual offset without breaking the hover bridge. */
 .vm-sub {
   display: none;
   position: absolute;
-  left: calc(100% + 6px);
+  left: 100%;
   top: 0;
   min-width: 140px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 6px;
+  padding-left: 12px;
+  margin-left: -6px;
   z-index: 30;
   box-shadow: 8px 4px 24px rgba(0,0,0,0.4);
+}
+
+/* Check-style items (toggleable list items with ✓ indicator) */
+.vm-item.vm-check { display: flex; align-items: center; gap: 8px; }
+.vm-item.vm-check .vm-check-mark {
+  width: 14px;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--accent);
+  transition: opacity 0.15s, color 0.15s;
+}
+.vm-item.vm-check[data-checked="false"] .vm-check-mark {
+  color: var(--text-dim);
+  opacity: 0.25;
+}
+.vm-item.vm-check[data-checked="false"] {
+  color: var(--text-dim);
 }
 .vm-sub.open { display: block; }
 /* Sub-menus position relative to the viz-menu (which is already absolute). */

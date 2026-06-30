@@ -9,8 +9,9 @@ contextBridge.exposeInMainWorld('resonance', {
   // Server info
   getServerStatus: () => ipcRenderer.invoke('server:status'),
 
-  // Mini-player toggle
+  // Mini-player toggle + close event from main process.
   toggleMiniPlayer: () => ipcRenderer.invoke('miniplayer:toggle'),
+  onMiniPlayerClosed: (cb) => ipcRenderer.on('miniplayer:closed', () => cb()),
 
   // JS-based window move — delta-based, called from the runtime.js drag handler.
   moveWindow: (dx, dy) => ipcRenderer.invoke('window:move', dx, dy),

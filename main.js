@@ -268,7 +268,15 @@ function toggleMiniPlayer() {
   const token = cfg.authToken || '';
   const theme = cfg.theme || 'auto';
   miniWindow.loadURL(`http://localhost:${serverPort}/mini.html?t=${encodeURIComponent(token)}&theme=${theme}`);
-  miniWindow.on('closed', () => { miniWindow = null; });
+  miniWindow.on('closed', () => {
+    miniWindow = null;
+    // Notify the main renderer so the '...' menu's Mini-player toggle
+    // reflects the actual state (otherwise it stays 'Enabled' after a
+    // close-via-× from the mini window).
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('miniplayer:closed');
+    }
+  });
 }
 
 ipcMain.handle('miniplayer:toggle', () => { toggleMiniPlayer(); });
