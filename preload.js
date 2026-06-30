@@ -55,5 +55,8 @@ contextBridge.exposeInMainWorld('resonance', {
   onUpdateError: (cb) => ipcRenderer.on('app:update-error', (_, d) => cb(d)),
   onUpdateUpToDate: (cb) => ipcRenderer.on('app:update-uptodate', (_, d) => cb(d)),
 
+  // Logging: send console.warn/error calls to renderer.log
+  logToFile: (level, message) => ipcRenderer.invoke('log:write', level, message),
+
   isElectron: true,
 });

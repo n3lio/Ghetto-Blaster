@@ -64,6 +64,32 @@ function streamUrl(id) { return apiUrl('/api/stream/' + id); }
   };
 })();
 
+// ─── Renderer Logging ──────────────────────────────────────────────────────
+// Wrap console.warn and console.error to also log to userData/logs/renderer.log
+// (only in Electron; mobile/browser calls still work normally).
+(function() {
+  var _warn = console.warn.bind(console);
+  var _error = console.error.bind(console);
+  console.warn = function() {
+    var msg = Array.prototype.slice.call(arguments).join(' ');
+    _warn.apply(console, arguments);
+    if (window.resonance && window.resonance.logToFile) {
+      window.resonance.logToFile('warn', msg).catch(function(e) {
+        // Silent fail if logging to file fails
+      });
+    }
+  };
+  console.error = function() {
+    var msg = Array.prototype.slice.call(arguments).join(' ');
+    _error.apply(console, arguments);
+    if (window.resonance && window.resonance.logToFile) {
+      window.resonance.logToFile('error', msg).catch(function(e) {
+        // Silent fail if logging to file fails
+      });
+    }
+  };
+})();
+
 // ─── State ───────────────────────────────────────────────────────────────────
 var tracks = [];        // Currently displayed/filtered tracks in Library
 var allTracks = [];     // Full unfiltered list — populated by fetchTracks()

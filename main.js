@@ -232,6 +232,38 @@ ipcMain.handle('config:pick-folder', async () => {
   return result.filePaths[0];
 });
 
+// Renderer logging: append console.log/warn/error calls to userData/logs/renderer.log
+// with automatic rotation when file reaches ~1MB.
+ipcMain.handle('log:write', (event, level, message) => {
+  try {
+    const dataDir = app.getPath('userData');
+    const logsDir = path.join(dataDir, 'logs');
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+
+    const logFile = path.join(logsDir, 'renderer.log');
+    const maxSize = 1024 * 1024; // 1 MB
+    const rotatedFile = path.join(logsDir, 'renderer.log.1');
+
+    // Check if we need to rotate
+    if (fs.existsSync(logFile)) {
+      const stats = fs.statSync(logFile);
+      if (stats.size >= maxSize) {
+        // Rotate: move current log to .1, start fresh
+        if (fs.existsSync(rotatedFile)) fs.unlinkSync(rotatedFile);
+        fs.renameSync(logFile, rotatedFile);
+      }
+    }
+
+    // Append with timestamp and level
+    const timestamp = new Date().toISOString();
+    const line = `[${timestamp}] [${level}] ${message}\n`;
+    fs.appendFileSync(logFile, line, 'utf8');
+  } catch (e) {
+    // Silent fail — don't crash the app if logging fails
+    console.error('[log:write] error:', e.message);
+  }
+});
+
 // ─── Mini-player (compact, always-on-top) ──────────────────────────────────
 let miniWindow = null;
 
