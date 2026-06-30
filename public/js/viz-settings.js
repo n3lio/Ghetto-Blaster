@@ -437,35 +437,46 @@ async function openSettings() {
   }
   renderFolderList();
 
-  // QR code — render UNCONDITIONALLY (outside the resonance branch so it
-  // always runs, even if an earlier await threw). The fetch is fire-and-
-  // forget so a failure here can't affect anything else in the modal.
+  // QR code — render UNCONDITIONALLY. Verbose debug shown directly in
+  // the modal so the user can see why it fails.
   (function renderQR() {
     var qrContainer = document.getElementById('qrCode');
     var qrUrl = document.getElementById('qrUrl');
     var qrLabel = document.getElementById('qrLabel');
     if (!qrContainer) return;
-    fetch('/api/qrcode')
+    qrLabel.textContent = 'Generating QR…';
+    fetch('/api/qrcode', { credentials: 'same-origin' })
       .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (!r.ok) {
+          return r.text().then(function(t) {
+            throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 100));
+          });
+        }
         return r.json();
       })
       .then(function(qrData) {
-        if (qrData && qrData.svg) {
-          qrContainer.style.display = 'flex';
-          qrContainer.innerHTML = qrData.svg;
-          // Make sure the SVG inside fills the container nicely.
-          var svg = qrContainer.querySelector('svg');
-          if (svg) { svg.style.width = '180px'; svg.style.height = '180px'; svg.style.display = 'block'; }
-          if (qrUrl) qrUrl.textContent = qrData.url || '';
-          if (qrLabel) qrLabel.textContent = 'Scan from your phone to open Ghetto Blaster';
-        } else {
-          if (qrLabel) qrLabel.textContent = 'QR code: server returned no data';
+        if (!qrData || !qrData.svg) {
+          qrLabel.textContent = 'QR endpoint returned no SVG (got: ' + JSON.stringify(qrData).slice(0, 80) + ')';
+          return;
         }
+        qrContainer.style.display = 'flex';
+        qrContainer.style.minWidth = '180px';
+        qrContainer.style.minHeight = '180px';
+        qrContainer.innerHTML = qrData.svg;
+        var svg = qrContainer.querySelector('svg');
+        if (svg) {
+          svg.setAttribute('width', '180');
+          svg.setAttribute('height', '180');
+          svg.style.width = '180px';
+          svg.style.height = '180px';
+          svg.style.display = 'block';
+        }
+        if (qrUrl) qrUrl.textContent = qrData.url || '';
+        if (qrLabel) qrLabel.textContent = 'Scan from your phone';
       })
       .catch(function(e) {
         console.warn('[gb] QR fetch failed:', e);
-        if (qrLabel) qrLabel.textContent = 'QR code unavailable (' + (e.message || 'fetch error') + ')';
+        qrLabel.textContent = 'QR error: ' + (e && e.message ? e.message : 'unknown');
       });
   })();
 }
