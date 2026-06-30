@@ -263,17 +263,20 @@
 
   <!-- Playlists Tab -->
   <div class="panel" id="panel-playlists">
+    <!-- Toolbar: Search on the left (like Library), action buttons on the right. -->
     <div class="toolbar">
-      <span class="track-count" id="playlistCount" style="padding:0;margin:0;"></span>
+      <div class="toolbar-input-wrap" style="flex:1;max-width:300px;">
+        <input type="text" id="playlistSearch" placeholder="Search playlists...">
+        <button class="toolbar-clear-x" id="clearPlaylistSearch" title="Clear">&times;</button>
+      </div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-        <div class="toolbar-input-wrap" style="flex:none;min-width:140px;max-width:180px;">
-          <input type="text" id="playlistSearch" placeholder="Search playlists..." style="padding:7px 30px 7px 12px;font-size:0.73rem;">
-          <button class="toolbar-clear-x" id="clearPlaylistSearch" title="Clear">&times;</button>
-        </div>
-        <div class="toolbar-sep"></div>
-        <button class="toolbar-btn" id="saveQueueAsPlaylist">Save Queue</button>
+        <button class="toolbar-btn" id="saveQueueAsPlaylist" title="Save current queue as a new playlist">Save Queue</button>
         <button class="toolbar-btn primary" id="createPlaylistBtn">+ New Playlist</button>
       </div>
+    </div>
+    <!-- Count line below toolbar, matching Library tab. -->
+    <div style="padding:6px 20px 0;">
+      <span class="track-count" id="playlistCount"></span>
     </div>
     <div class="playlists-view" id="playlistsView"></div>
   </div>
@@ -566,8 +569,12 @@
     <div class="modal-body">
       <label>Name</label>
       <input type="text" id="plName" placeholder="My playlist...">
-      <label style="margin-top:14px">From keywords (title, artist, album)</label>
+      <label style="margin-top:14px">Include — keywords (comma separated)</label>
       <input type="text" id="plKeywords" placeholder="chill, jazz, lofi...">
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0;">Tracks whose title, artist, album, or genre matches any keyword.</p>
+      <label style="margin-top:14px">Exclude — drop tracks whose genre also matches</label>
+      <input type="text" id="plExcludes" placeholder="rap français, french rap...">
+      <p style="font-size:0.7rem;color:var(--text-dim);margin:4px 0 0;">Optional. Useful to exclude close-but-not-quite genres.</p>
     </div>
     <div class="modal-actions">
       <button id="plCancel">Cancel</button>
