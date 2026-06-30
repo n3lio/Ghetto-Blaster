@@ -137,6 +137,12 @@ function fetchStats() {
         return '<div class="stat-row"><span class="stat-rank">' + (i+1) + '</span><span class="stat-name">' + esc(g.name) + '</span><div class="stat-bar"><div class="stat-bar-fill" style="width:' + (g.count/maxGenre*100) + '%;background:' + barColor + '"></div></div><span class="stat-count">' + g.count + '</span></div>';
       }).join('');
     }
+
+    // Daily plays chart
+    renderDailyPlaysChart(s.dailyPlays || []);
+
+    // Hourly pattern heatmap
+    renderHourlyHeatmap(s.hourlyPattern || {});
   }).catch(function(e){ console.warn('[gb] stats fetch failed:', e && e.message); });
 
   // Server stats
@@ -167,6 +173,103 @@ function showToast(msg) {
   document.body.appendChild(t);
   setTimeout(function(){ t.style.opacity = '0'; }, 5000);
   setTimeout(function(){ t.remove(); }, 5600);
+}
+
+// ─── Chart rendering functions ──────────────────────────────────────────────
+function renderDailyPlaysChart(dailyPlays) {
+  var container = document.getElementById('statsDailyChart');
+  if (!container) return;
+  if (!dailyPlays || dailyPlays.length === 0) {
+    container.innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);padding:12px 0;">No plays yet — start listening to populate</p>';
+    return;
+  }
+  var maxCount = Math.max.apply(null, dailyPlays.map(function(d) { return d.count; })) || 1;
+  var width = container.clientWidth || 400;
+  var height = 120;
+  var barWidth = Math.max(2, width / dailyPlays.length - 2);
+  var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:100%;overflow:visible;"><defs><linearGradient id="barGrad" x1="0" y1="0" x1="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity="0.8"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0.3"/></linearGradient></defs>';
+  dailyPlays.forEach(function(d, i) {
+    var barH = (d.count / maxCount) * (height - 20);
+    var x = i * (width / dailyPlays.length) + 2;
+    var y = height - 15 - barH;
+    svg += '<rect x="' + x + '" y="' + y + '" width="' + (barWidth - 2) + '" height="' + barH + '" fill="url(#barGrad)" class="daily-bar" data-date="' + esc(d.date) + '" data-count="' + d.count + '" style="cursor:pointer;transition:opacity 0.2s;opacity:0.9;" onmouseover="this.style.opacity=\'1\'" onmouseout="this.style.opacity=\'0.9\'"/>';
+  });
+  svg += '<line x1="0" y1="' + (height - 15) + '" x2="' + width + '" y2="' + (height - 15) + '" stroke="var(--border)" stroke-width="1"/>';
+  svg += '</svg>';
+  container.innerHTML = svg;
+  // Add tooltip listener
+  var bars = container.querySelectorAll('.daily-bar');
+  bars.forEach(function(bar) {
+    bar.addEventListener('mouseenter', function() {
+      var tooltip = document.createElement('div');
+      tooltip.className = 'stat-tooltip';
+      tooltip.textContent = bar.dataset.date + ': ' + bar.dataset.count + ' plays';
+      tooltip.style.cssText = 'position:absolute;background:var(--surface);border:1px solid var(--accent);border-radius:4px;padding:6px 10px;font-size:0.75rem;color:var(--text);pointer-events:none;white-space:nowrap;z-index:10;';
+      document.body.appendChild(tooltip);
+      var rect = bar.getBoundingClientRect();
+      tooltip.style.left = (rect.left + rect.width/2 - tooltip.offsetWidth/2) + 'px';
+      tooltip.style.top = (rect.top - 30) + 'px';
+      bar._tooltip = tooltip;
+    });
+    bar.addEventListener('mouseleave', function() {
+      if (bar._tooltip) { bar._tooltip.remove(); bar._tooltip = null; }
+    });
+  });
+}
+
+function renderHourlyHeatmap(hourlyPattern) {
+  var container = document.getElementById('statsHeatmap');
+  if (!container) return;
+  var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var hasData = dayNames.some(function(d) { return hourlyPattern[d] && hourlyPattern[d].some(function(c) { return c > 0; }); });
+  if (!hasData) {
+    container.innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);padding:12px 0;">No plays yet — start listening to populate</p>';
+    return;
+  }
+  var cellSize = 18;
+  var gap = 2;
+  var maxCount = 0;
+  dayNames.forEach(function(d) { if (hourlyPattern[d]) { maxCount = Math.max.apply(null, hourlyPattern[d].concat([maxCount])); } });
+  maxCount = Math.max(1, maxCount);
+  var width = 24 * cellSize + 25 * gap + 50;
+  var height = 7 * cellSize + 8 * gap + 40;
+  var svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:auto;"><defs><linearGradient id="heatGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="rgba(0,0,0,0)"/><stop offset="100%" stop-color="var(--accent)"/></linearGradient></defs>';
+  dayNames.forEach(function(day, dayIdx) {
+    var y = 30 + dayIdx * (cellSize + gap);
+    svg += '<text x="8" y="' + (y + 12) + '" font-size="11" fill="var(--text-dim)" text-anchor="end">' + day + '</text>';
+    var pattern = hourlyPattern[day] || Array(24).fill(0);
+    for (var h = 0; h < 24; h++) {
+      var count = pattern[h] || 0;
+      var intensity = count / maxCount;
+      var x = 50 + h * (cellSize + gap);
+      var hsl = 'hsl(var(--accent-h), var(--accent-s), ' + (50 - intensity * 30) + '%)';
+      svg += '<rect x="' + x + '" y="' + y + '" width="' + cellSize + '" height="' + cellSize + '" fill="' + hsl + '" stroke="var(--border)" stroke-width="0.5" class="heatmap-cell" data-hour="' + h + '" data-day="' + esc(day) + '" data-count="' + count + '" style="cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8"/>';
+    }
+  });
+  svg += '<text x="50" y="25" font-size="10" fill="var(--text-dim)" text-anchor="middle">0</text>';
+  svg += '<text x="' + (50 + 6 * (cellSize + gap)) + '" y="25" font-size="10" fill="var(--text-dim)" text-anchor="middle">6</text>';
+  svg += '<text x="' + (50 + 12 * (cellSize + gap)) + '" y="25" font-size="10" fill="var(--text-dim)" text-anchor="middle">12</text>';
+  svg += '<text x="' + (50 + 18 * (cellSize + gap)) + '" y="25" font-size="10" fill="var(--text-dim)" text-anchor="middle">18</text>';
+  svg += '</svg>';
+  container.innerHTML = svg;
+  // Add tooltip listener
+  var cells = container.querySelectorAll('.heatmap-cell');
+  cells.forEach(function(cell) {
+    cell.addEventListener('mouseenter', function() {
+      var tooltip = document.createElement('div');
+      tooltip.className = 'stat-tooltip';
+      tooltip.textContent = cell.dataset.day + ' ' + (parseInt(cell.dataset.hour) < 10 ? '0' : '') + cell.dataset.hour + ':00 — ' + cell.dataset.count + ' plays';
+      tooltip.style.cssText = 'position:absolute;background:var(--surface);border:1px solid var(--accent);border-radius:4px;padding:6px 10px;font-size:0.75rem;color:var(--text);pointer-events:none;white-space:nowrap;z-index:10;';
+      document.body.appendChild(tooltip);
+      var rect = cell.getBoundingClientRect();
+      tooltip.style.left = (rect.left + rect.width/2 - tooltip.offsetWidth/2) + 'px';
+      tooltip.style.top = (rect.top - 30) + 'px';
+      cell._tooltip = tooltip;
+    });
+    cell.addEventListener('mouseleave', function() {
+      if (cell._tooltip) { cell._tooltip.remove(); cell._tooltip = null; }
+    });
+  });
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -837,7 +940,7 @@ if ('serviceWorker' in navigator && !window.resonance) {
     return typeof cfg.volume === 'number' ? cfg.volume : 1;
   }
   function applyBoost() {
-    if (!isEnabled() || window.crossfadeTriggered) { currentBoost = 1; return; }
+    if (!isEnabled()) { currentBoost = 1; return; }
     audioEl.volume = Math.min(1, userVolume() * currentBoost);
   }
 
@@ -939,7 +1042,6 @@ if ('serviceWorker' in navigator && !window.resonance) {
 
   function applyForCurrentTrack() {
     if (!isEnabled()) return;
-    if (window.crossfadeTriggered) return; // never fight the crossfade
     if (!audioEl.src) return;
     var m = /\/api\/stream\/(\d+)/.exec(audioEl.src);
     if (!m) return;
@@ -2013,7 +2115,6 @@ if ('serviceWorker' in navigator && !window.resonance) {
   var audioEl = document.querySelector('audio');
   if (!audioEl) return;
   audioEl.addEventListener('loadstart', function() {
-    if (window.crossfadeTriggered) return;
     var cfg = window._appConfig || {};
     if (typeof cfg.volume === 'number' && cfg.volume >= 0 && cfg.volume <= 1) {
       audioEl.volume = cfg.volume;

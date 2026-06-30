@@ -483,10 +483,6 @@ async function openSettingsInner() {
         });
       });
     }
-    document.getElementById('settingsCrossfade').checked = !!cfg.crossfade;
-    document.getElementById('settingsCrossfadeDur').value = cfg.crossfadeDuration || 3;
-    document.getElementById('crossfadeVal').textContent = cfg.crossfadeDuration || 3;
-    document.getElementById('crossfadeDuration').style.display = cfg.crossfade ? 'block' : 'none';
     try {
       var ver = await window.resonance.getVersion();
       document.getElementById('aboutVersion').textContent = 'v' + ver;
@@ -526,14 +522,6 @@ document.getElementById('addFolderBtn').addEventListener('click', async function
     var folder = prompt('Enter folder path:');
     if (folder) { settingsFolders.push(folder); renderFolderList(); }
   }
-});
-
-// Crossfade settings UI
-document.getElementById('settingsCrossfade').addEventListener('change', function() {
-  document.getElementById('crossfadeDuration').style.display = this.checked ? 'block' : 'none';
-});
-document.getElementById('settingsCrossfadeDur').addEventListener('input', function(e) {
-  document.getElementById('crossfadeVal').textContent = e.target.value;
 });
 
 // Live preview hue
@@ -577,8 +565,6 @@ async function saveSettings(opts) {
   vizVisible = document.getElementById('settingsVizEnabled').checked;
   var hue = parseInt(document.getElementById('settingsHue').value);
   var lanEnabled = document.getElementById('settingsLanEnabled').checked;
-  var crossfade = document.getElementById('settingsCrossfade').checked;
-  var crossfadeDuration = parseInt(document.getElementById('settingsCrossfadeDur').value) || 3;
   var audioOutput = document.getElementById('settingsAudioOutput').value;
 
   // Switch audio output device
@@ -614,7 +600,7 @@ async function saveSettings(opts) {
   settingsModal.classList.remove('open');
 
   if (window.resonance) {
-    window._appConfig = { musicFolders: settingsFolders, vizEnabled: vizVisible, vizMode: vizMode, vizColorMode: vizColorMode, hue: hue, lanEnabled: lanEnabled, crossfade: crossfade, crossfadeDuration: crossfadeDuration, audioOutput: audioOutput };
+    window._appConfig = { musicFolders: settingsFolders, vizEnabled: vizVisible, vizMode: vizMode, vizColorMode: vizColorMode, hue: hue, lanEnabled: lanEnabled, audioOutput: audioOutput };
     await window.resonance.setConfig(window._appConfig);
   }
 

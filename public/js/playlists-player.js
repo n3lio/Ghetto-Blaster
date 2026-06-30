@@ -383,40 +383,7 @@ audio.addEventListener('timeupdate', function() {
   document.getElementById('currentTime').textContent = formatTime(audio.currentTime);
 });
 
-// Crossfade: check if near end of track
-var crossfadeTriggered = false;
-audio.addEventListener('timeupdate', function() {
-  if (!audio.duration || crossfadeTriggered) return;
-  var cfg = (window.resonance && window._appConfig) || {};
-  if (!cfg.crossfade) return;
-  var fadeDur = cfg.crossfadeDuration || 3;
-  var remaining = audio.duration - audio.currentTime;
-  if (remaining <= fadeDur && remaining > 0 && currentIndex < queue.length - 1) {
-    crossfadeTriggered = true;
-    // Fade out current
-    var fadeStep = 0.05;
-    var fadeInterval = setInterval(function() {
-      if (audio.volume > fadeStep) audio.volume -= fadeStep;
-      else { clearInterval(fadeInterval); }
-    }, fadeDur * 1000 * fadeStep);
-    // Start next track (will reset volume)
-    setTimeout(function() {
-      currentIndex++;
-      var savedVol = (window._appConfig && window._appConfig.volume != null) ? window._appConfig.volume : 1;
-      playCurrentTrack();
-      audio.volume = 0;
-      var fadeIn = setInterval(function() {
-        if (audio.volume < savedVol - fadeStep) audio.volume += fadeStep;
-        else { audio.volume = savedVol; clearInterval(fadeIn); }
-      }, fadeDur * 1000 * fadeStep * 0.5);
-      renderQueue();
-      crossfadeTriggered = false;
-    }, (fadeDur - 0.5) * 1000);
-  }
-});
-
 audio.addEventListener('ended', function() {
-  if (crossfadeTriggered) { crossfadeTriggered = false; return; } // Already handled by crossfade
   if (currentIndex < queue.length - 1) {
     currentIndex++;
     playCurrentTrack();

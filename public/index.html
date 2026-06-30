@@ -358,6 +358,16 @@
         <div><h3 style="font-size:0.82rem;font-weight:600;color:var(--text-muted);margin-bottom:10px;">Top Artists (30 days)</h3><div id="statsArtists"></div></div>
         <div><h3 style="font-size:0.82rem;font-weight:600;color:var(--text-muted);margin-bottom:10px;">Top Genres (30 days)</h3><div id="statsGenres"></div></div>
       </div>
+      <!-- Daily plays chart -->
+      <div style="margin-top:24px;">
+        <h3 style="font-size:0.82rem;font-weight:600;color:var(--text-muted);margin-bottom:12px;">Plays per day (last 30 days)</h3>
+        <div id="statsDailyChart" style="width:100%;height:120px;"></div>
+      </div>
+      <!-- Hourly pattern heatmap -->
+      <div style="margin-top:24px;">
+        <h3 style="font-size:0.82rem;font-weight:600;color:var(--text-muted);margin-bottom:12px;">Listening pattern</h3>
+        <div id="statsHeatmap" style="width:100%;overflow-x:auto;"></div>
+      </div>
       <!-- Server Stats -->
       <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:20px;">
         <h2 style="font-size:0.9rem;font-weight:600;color:var(--text-muted);margin-bottom:12px;">Server Stats</h2>
@@ -472,10 +482,6 @@
       <select id="settingsAudioOutput" style="width:100%;padding:8px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);font-size:0.83rem;margin-bottom:14px;">
         <option value="">Default</option>
       </select>
-
-      <!-- Crossfade removed in v3.16.2 (user feedback: not convincing). -->
-      <input type="checkbox" id="settingsCrossfade" style="display:none;">
-      <div id="crossfadeDuration" style="display:none;"><input type="range" id="settingsCrossfadeDur" min="1" max="8" value="3"></div>
 
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
         <input type="checkbox" id="settingsNormalize" style="width:16px;height:16px;accent-color:var(--accent);">

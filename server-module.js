@@ -1410,6 +1410,35 @@ function startServer(port) {
       const weekMinutes = Math.round(weekPlays.length * 3.5);
       const monthMinutes = Math.round(monthPlays.length * 3.5);
 
+      // Daily plays for last 30 days
+      const dailyMap = new Map();
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        dailyMap.set(dateStr, 0);
+      }
+      monthPlays.forEach(h => {
+        const dateStr = new Date(h.playedAt).toISOString().split('T')[0];
+        if (dailyMap.has(dateStr)) {
+          dailyMap.set(dateStr, dailyMap.get(dateStr) + 1);
+        }
+      });
+      const dailyPlays = Array.from(dailyMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, count]) => ({ date, count }));
+
+      // Hourly pattern by day of week (0=Sun, 1=Mon, ..., 6=Sat)
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const hourlyPattern = {};
+      dayNames.forEach(d => { hourlyPattern[d] = Array(24).fill(0); });
+      monthPlays.forEach(h => {
+        const d = new Date(h.playedAt);
+        const dayOfWeek = dayNames[d.getDay()];
+        const hour = d.getHours();
+        hourlyPattern[dayOfWeek][hour]++;
+      });
+
       res.json({
         week: { plays: weekPlays.length, minutes: weekMinutes },
         month: { plays: monthPlays.length, minutes: monthMinutes },
@@ -1417,6 +1446,8 @@ function startServer(port) {
         topGenres,
         totalTracks: trackCount(),
         favorites: favorites.size,
+        dailyPlays,
+        hourlyPattern,
       });
     });
 

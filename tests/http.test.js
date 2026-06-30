@@ -246,6 +246,33 @@ test('GET /api/library/export.csv returns CSV with header row', async () => {
   assert.ok(res.text.split('\n')[0].includes('id,title,artist'));
 });
 
+test('GET /api/stats returns stats with time-based breakdowns', async () => {
+  // Seed library and history so we have data to aggregate
+  await request(baseUrl).post('/api/_dev/library/seed').send({ count: 10, seed: 1 }).expect(200);
+  // Add some plays to history
+  const trackRes = await request(baseUrl).get('/api/tracks').expect(200);
+  if (trackRes.body.length > 0) {
+    await request(baseUrl).post('/api/play-start').send({ trackId: trackRes.body[0].id }).expect(200);
+    await request(baseUrl).post('/api/play-end').send({ trackId: trackRes.body[0].id, duration: 180 }).expect(200);
+  }
+  const res = await request(baseUrl).get('/api/stats').expect(200);
+  // Check KPI structure
+  assert.ok(res.body.week && typeof res.body.week.plays === 'number');
+  assert.ok(res.body.month && typeof res.body.month.plays === 'number');
+  assert.ok(Array.isArray(res.body.topArtists));
+  assert.ok(Array.isArray(res.body.topGenres));
+  assert.equal(typeof res.body.totalTracks, 'number');
+  assert.equal(typeof res.body.favorites, 'number');
+  // Check new time-based fields
+  assert.ok(Array.isArray(res.body.dailyPlays), 'dailyPlays must be an array');
+  assert.ok(res.body.dailyPlays.every(d => d.date && typeof d.count === 'number'), 'dailyPlays entries must have date and count');
+  assert.ok(res.body.hourlyPattern, 'hourlyPattern must exist');
+  ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+    assert.ok(Array.isArray(res.body.hourlyPattern[day]), 'hourlyPattern must have arrays for each day');
+    assert.equal(res.body.hourlyPattern[day].length, 24, 'each day must have 24 hours');
+  });
+});
+
 test('GET /api/stats/folders returns folder breakdown', async () => {
   const res = await request(baseUrl).get('/api/stats/folders').expect(200);
   assert.ok(Array.isArray(res.body.folders));
