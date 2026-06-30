@@ -50,11 +50,13 @@ test('GET /api/state returns player snapshot', async () => {
     .expect('Content-Type', /json/)
     .expect(200);
 
+  // getState() shape (server-module.js): { queue, currentIndex, isPlaying,
+  // currentTrack (nullable), desktop }. NOT currentTrackId / queueIndex.
   assert.ok(typeof res.body === 'object');
-  assert.ok('currentTrackId' in res.body);
   assert.ok('isPlaying' in res.body);
   assert.ok('queue' in res.body);
-  assert.ok('queueIndex' in res.body);
+  assert.ok('currentIndex' in res.body);
+  assert.ok('currentTrack' in res.body);
 });
 
 test('GET /api/tracks returns array', async () => {
