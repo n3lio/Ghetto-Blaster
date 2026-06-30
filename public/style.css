@@ -591,14 +591,52 @@
     }
 
     /* ─── Queue Panel ─── */
-    .queue-header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-    .queue-header h2 { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
-    .queue-actions { display: flex; gap: 6px; }
-    .queue-actions button {
-      background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
-      font-size: 0.72rem; font-family: var(--font); padding: 5px 12px; border-radius: 14px; transition: all 0.2s; font-weight: 500;
+    /* Queue header — aligned with .toolbar in Library/Playlists tabs for
+       visual cohesion when switching tabs. Same min-height, same button
+       styling, same horizontal padding. */
+    .queue-header {
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      min-height: 54px;
+      box-sizing: border-box;
+      gap: 10px;
     }
-    .queue-actions button:hover { color: var(--accent); background: var(--accent-subtle); border-color: var(--accent); }
+    .queue-header h2 {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .queue-actions { display: flex; gap: 8px; align-items: center; }
+    /* Same surface, border, font, height as .toolbar-btn so Shuffle / Clear /
+       Compact in the queue header match Shuffle All / New Playlist visually. */
+    .queue-actions button {
+      padding: 9px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-family: var(--font);
+      font-weight: 500;
+      transition: all 0.2s;
+      white-space: nowrap;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      box-sizing: border-box;
+    }
+    .queue-actions button:hover {
+      color: var(--accent);
+      background: var(--accent-subtle);
+      border-color: var(--accent);
+    }
 
     /* ─── Playlists ─── */
     .playlists-view { padding: 16px 20px; overflow-y: auto; flex: 1; }
