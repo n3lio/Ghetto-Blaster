@@ -364,6 +364,40 @@ function saveLibraryCache() {
   }
 }
 
+// ─── Infer music folders from library track paths ─────────────────────────
+// Used by /api/config/public when config.musicFolders is empty but the
+// library cache holds tracks (recovery case after a bad config save).
+// Returns the longest common path prefixes per drive, deduplicated.
+function inferFoldersFromLibrary() {
+  const paths = library.filter(Boolean).map(t => t.path).filter(Boolean);
+  if (paths.length === 0) return [];
+  // Group by top-level drive (Windows) or filesystem root (Unix).
+  const byRoot = new Map();
+  for (const p of paths) {
+    const root = path.parse(p).root || '/';
+    if (!byRoot.has(root)) byRoot.set(root, []);
+    byRoot.get(root).push(p);
+  }
+  const folders = new Set();
+  for (const [, group] of byRoot) {
+    // Find the deepest common directory.
+    if (group.length === 0) continue;
+    const parts = group[0].split(/[\\/]/);
+    let commonDepth = parts.length - 1; // exclude filename
+    for (let i = 1; i < group.length; i++) {
+      const otherParts = group[i].split(/[\\/]/);
+      let d = 0;
+      while (d < commonDepth && d < otherParts.length - 1 && otherParts[d] === parts[d]) d++;
+      commonDepth = d;
+    }
+    if (commonDepth > 0) {
+      const common = parts.slice(0, commonDepth).join(path.sep);
+      if (common) folders.add(path.resolve(common));
+    }
+  }
+  return Array.from(folders);
+}
+
 // ─── Library Scanner ─────────────────────────────────────────────────────────
 const AUDIO_EXTENSIONS = validation.AUDIO_EXTENSIONS;
 let scanning = false;
@@ -1799,8 +1833,24 @@ function startServer(port) {
     // Safe public config snapshot for the renderer settings modal.
     // Exposes user-mutable fields, NEVER the auth token or secrets.
     app.get('/api/config/public', (req, res) => {
+      // If musicFolders is empty but the library cache has tracks, infer
+      // the folders from track paths. This recovers from the case where
+      // a previous version's config didn't persist the folder list
+      // properly but the library cache survived. Also write them back
+      // to config so subsequent boots have a proper folder list.
+      let folders = config.musicFolders || [];
+      if ((!folders || folders.length === 0) && library.filter(Boolean).length > 0) {
+        folders = inferFoldersFromLibrary();
+        if (folders.length > 0) {
+          config.musicFolders = folders;
+          try {
+            fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
+            log.info('inferred musicFolders from library cache', { folders });
+          } catch (e) { /* ignore */ }
+        }
+      }
       res.json({
-        musicFolders: config.musicFolders || [],
+        musicFolders: folders,
         excludeFolders: config.excludeFolders || [],
         port: config.port || 3000,
         hue: config.hue,
