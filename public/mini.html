@@ -21,6 +21,22 @@ body {
   background: #161514 center/cover no-repeat;
   position: relative;
 }
+/* Placeholder when track has no cover — subtle music-note gradient. */
+.cover.no-cover {
+  background: linear-gradient(135deg, #161514, #0f0e0d) !important;
+}
+.cover.no-cover::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%235a534d" stroke-width="1.2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>') center/50px no-repeat;
+  opacity: 0.35;
+}
+body.light .cover.no-cover {
+  background: linear-gradient(135deg, #ebe7df, #d8d4cd) !important;
+}
+body.light .cover.no-cover::before {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%239a918a" stroke-width="1.2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>');
+}
 .cover .overlay {
   position: absolute; inset: 0;
   background: linear-gradient(transparent 40%, rgba(0,0,0,0.85) 100%);
@@ -149,10 +165,16 @@ function updateUI(d) {
   pb.innerHTML = isPlaying
     ? '<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>'
     : '<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M8 5v14l11-7z"/></svg>';
-  // Cover.
+  // Cover — clear when the new track has none so the previous track's
+  // image doesn't persist.
+  var coverEl = document.getElementById('cover');
   if (d.hasCover && d.trackId != null) {
     var url = '/api/cover/' + d.trackId + (token ? '?t=' + encodeURIComponent(token) : '');
-    document.getElementById('cover').style.backgroundImage = 'url(' + url + ')';
+    coverEl.style.backgroundImage = 'url(' + url + ')';
+    coverEl.classList.remove('no-cover');
+  } else {
+    coverEl.style.backgroundImage = 'none';
+    coverEl.classList.add('no-cover');
   }
   // Progress + time display.
   currentDuration = d.duration || 0;

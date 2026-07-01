@@ -223,7 +223,12 @@ function renderHourlyHeatmap(hourlyPattern) {
   var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   var hasData = dayNames.some(function(d) { return hourlyPattern[d] && hourlyPattern[d].some(function(c) { return c > 0; }); });
   if (!hasData) {
-    container.innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);padding:12px 0;">No plays yet — start listening to populate</p>';
+    // Explicit count so the user sees whether it's really 0 or a bug.
+    var total = 0;
+    dayNames.forEach(function(d) { if (hourlyPattern[d]) hourlyPattern[d].forEach(function(c) { total += c || 0; }); });
+    container.innerHTML = '<p style="font-size:0.78rem;color:var(--text-dim);padding:12px 0;">No plays in the last 30 days'
+      + (total > 0 ? ' (server reported ' + total + ' but bucketed to 0 — please report)' : ' — start listening to populate')
+      + '</p>';
     return;
   }
   var cellSize = 18;

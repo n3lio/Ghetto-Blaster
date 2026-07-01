@@ -174,8 +174,15 @@ try { (function setupNewVizMenu() {
     }
     menu.classList.remove('open');
   });
-  // Listen for the main process telling us the mini-player window closed
-  // (via its × button or any other path) so the toggle reflects reality.
+  // Listen for main-process events so the toggle reflects reality when
+  // the mini-player is opened OR closed via paths other than this button
+  // (e.g. double-click cover to open, × in mini window to close).
+  if (window.resonance && window.resonance.onMiniPlayerOpened) {
+    window.resonance.onMiniPlayerOpened(function() {
+      miniActive = true;
+      syncMiniToggle();
+    });
+  }
   if (window.resonance && window.resonance.onMiniPlayerClosed) {
     window.resonance.onMiniPlayerClosed(function() {
       miniActive = false;
