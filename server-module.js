@@ -878,6 +878,10 @@ function startServer(port) {
     }
 
     function authMiddleware(req, res, next) {
+      // /api/health is deliberately unauthenticated — mobile clients need
+      // to verify the server is reachable BEFORE they present a token.
+      // Returns only version/uptime/library-count, no secrets.
+      if (req.path === '/health') return next();
       if (isLocalRequest(req)) return next();
       const expected = getAuthToken();
       const headerToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
@@ -1864,6 +1868,19 @@ function startServer(port) {
     });
 
     // Theme (for mobile to sync accent color)
+    // ─── /api/health — always-open lightweight ping ────────────────────
+    // Bypasses auth (like /api/state on localhost, this is fine on LAN
+    // because it returns no secrets). Used by the mobile client at boot
+    // to detect a working server before making authenticated calls.
+    app.get('/api/health', (req, res) => {
+      res.json({
+        ok: true,
+        version: (function() { try { return require('./package.json').version; } catch(e) { return 'unknown'; } })(),
+        uptime: Math.round(process.uptime()),
+        library: trackCount(),
+      });
+    });
+
     // Safe public config snapshot for the renderer settings modal.
     // Exposes user-mutable fields, NEVER the auth token or secrets.
     app.get('/api/config/public', (req, res) => {

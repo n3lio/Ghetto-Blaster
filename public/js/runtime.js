@@ -889,6 +889,10 @@ if ('serviceWorker' in navigator && !window.resonance) {
 
   function maybeShowDesktop() {
     if (SEEN_VARIANT === 'desktop' || SEEN_VARIANT === 'desktop-skip') return;
+    // Guard: window.resonance is undefined on mobile/LAN clients. Without
+    // this check the onboarding module threw TypeError at boot → white
+    // screen on mobile after 401 or on a fresh scan.
+    if (!(window.resonance && window.resonance.getConfig)) return;
     fetch('/api/tracks/count').then(function(r) { return r.json(); }).then(function(d) {
       if (d && d.count > 0) return;
       window.resonance.getConfig().then(function(cfg) {
