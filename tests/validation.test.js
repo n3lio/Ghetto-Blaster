@@ -74,6 +74,22 @@ test('REMOTE_COMMANDS includes the core commands', () => {
   assert.ok(v.REMOTE_COMMANDS.has('play'));
   assert.ok(v.REMOTE_COMMANDS.has('pause'));
   assert.ok(v.REMOTE_COMMANDS.has('next'));
-  assert.ok(v.REMOTE_COMMANDS.has('queue-add'));
+  assert.ok(v.REMOTE_COMMANDS.has('add-to-queue'));
   assert.equal(v.REMOTE_COMMANDS.has('execute-arbitrary-code'), false);
+});
+
+// Guard against the whitelist drifting away from the verbs the front end
+// actually emits. These are the commands the renderer sends via
+// sendRemoteCommand(); every one must be accepted by the API or remote
+// control silently breaks (this is exactly how remote volume regressed).
+test('REMOTE_COMMANDS matches the verbs the renderer emits', () => {
+  const emitted = [
+    'play', 'pause', 'next', 'prev', 'shuffle',
+    'play-track', 'play-playlist', 'play-index',
+    'set-volume', 'set-output',
+    'add-to-queue', 'add-tracks', 'shuffle-play', 'queue-set-all', 'clear',
+  ];
+  for (const cmd of emitted) {
+    assert.ok(v.REMOTE_COMMANDS.has(cmd), `REMOTE_COMMANDS missing '${cmd}'`);
+  }
 });

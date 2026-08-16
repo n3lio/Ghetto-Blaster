@@ -543,6 +543,19 @@ function remoteAddToQueue(trackId) {
         playCurrentTrack();
         renderQueue();
       }
+      if (cmd === 'queue-set-all') {
+        // Mobile "Play All" on the virtual __all__ playlist: shuffle the whole
+        // desktop library. The mobile doesn't send IDs for this one — the
+        // desktop is the source of truth for the full library.
+        var allLib = window.allTracks || window.tracks || [];
+        var allIds = (Array.isArray(allLib) ? allLib : []).map(function(t){ return t.id; });
+        if (allIds.length) {
+          queue = smartShuffle(allIds);
+          currentIndex = 0;
+          playCurrentTrack();
+          renderQueue();
+        }
+      }
       if (cmd === 'add-to-queue' && msg.data.trackId != null) {
         queue.push(msg.data.trackId);
         renderQueue();

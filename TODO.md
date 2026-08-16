@@ -7,6 +7,7 @@
 
 ## 🔥 Bugs / risques connus
 
+- [x] ~~**Contrôle à distance mobile cassé (volume + file)**~~ *(P0)* — v3.19.1 : la whitelist `REMOTE_COMMANDS` utilisait un vocabulaire théorique (`volume`, `queue-add`, `seek`…) que le front n'émet jamais. Le mobile envoie `set-volume`, `add-to-queue`, `add-tracks`, `shuffle-play`, `queue-set-all`, `clear`, `play-index` → tous rejetés en `unknown command`. Whitelist réalignée sur les verbes réels du front + handler desktop `queue-set-all` ajouté (manquait) + test anti-drift (verbes émis ⊆ whitelist).
 - [x] ~~**Mobile = page blanche / non stylée**~~ *(P0)* — v3.19.0 : CSP bloquait `fonts.googleapis.com` + `fonts.gstatic.com` → la font DM Sans ne chargeait pas et l'UI tombait en font système (aspect cassé). `style-src`/`font-src` autorisent maintenant Google Fonts. (Le TypeError `getConfig` était déjà guardé en v3.18.9.)
 - [x] ~~**Volume "trop fort" (normalisation)**~~ *(P0)* — v3.19.0 : la normalisation *boostait* les tracks calmes jusqu'à ×2 → dépassait le niveau réglé. Passée en **atténuation seule** (`MAX_BOOST = 1`), elle ne peut plus que baisser les tracks fortes. Checkbox Settings corrigée (affichait ON alors que le moteur était OFF).
 - [x] ~~**Volume non persistant entre tracks (saute/augmente)**~~ *(P0)* — v3.19.0 : le slider écrivait sur disque via `setConfig` mais pas dans `window._appConfig.volume` en mémoire → `setupVolumePersist` réappliquait la valeur de boot au `loadstart` suivant. Le slider synchronise maintenant la config en mémoire d'abord.
