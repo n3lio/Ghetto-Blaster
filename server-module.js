@@ -806,10 +806,15 @@ function startServer(port) {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
+          // Google Fonts stylesheet is pulled from fonts.googleapis.com and the
+          // actual woff2 files from fonts.gstatic.com (see index.html <link>).
+          // Without these two, the CSP blocks the font on mobile browsers and
+          // the UI falls back to an unstyled system font (looked like a broken
+          // page). Everything else stays same-origin.
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
           imgSrc: ["'self'", 'data:', 'blob:'],
           mediaSrc: ["'self'", 'blob:'],
-          fontSrc: ["'self'", 'data:'],
+          fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
           connectSrc: ["'self'", 'ws:', 'wss:', 'http:', 'https:'],
           objectSrc: ["'none'"],
           baseUri: ["'self'"],
@@ -1499,7 +1504,7 @@ function startServer(port) {
         // play through the M3U without needing the original file paths.
         lines.push(`/api/stream/${id}`);
       }
-      const safe = (pl.name || 'playlist').replace(/[^\w\d\-]+/g, '_');
+      const safe = (pl.name || 'playlist').replace(/[^\w\d-]+/g, '_');
       res.set('Content-Type', 'audio/x-mpegurl');
       res.set('Content-Disposition', `attachment; filename="${safe}.m3u"`);
       res.send(lines.join('\n') + '\n');

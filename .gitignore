@@ -25,3 +25,6 @@ out/
 
 # Electron Builder
 release/
+
+# Local dev mock data (created by scripts/dev-server.js)
+dev-data/

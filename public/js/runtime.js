@@ -254,7 +254,10 @@ function renderHourlyHeatmap(hourlyPattern) {
       var count = pattern[h] || 0;
       var intensity = count / maxCount;
       var x = LEFT_MARGIN + h * (cellSize + gap);
-      var hsl = 'hsl(var(--accent-h), var(--accent-s), ' + (50 - intensity * 30) + '%)';
+      // Use --hue (the only accent var the CSS actually defines) with a fixed
+      // saturation. The old code referenced --accent-h/--accent-s, which don't
+      // exist, so every cell got an invalid (transparent) fill → empty chart.
+      var hsl = 'hsl(var(--hue), 80%, ' + (50 - intensity * 30) + '%)';
       svg += '<rect x="' + x + '" y="' + y + '" width="' + cellSize + '" height="' + cellSize + '" fill="' + hsl + '" stroke="var(--border)" stroke-width="0.5" class="heatmap-cell" data-hour="' + h + '" data-day="' + esc(day) + '" data-count="' + count + '" style="cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8"/>';
     }
   });
@@ -992,7 +995,11 @@ if ('serviceWorker' in navigator && !window.resonance) {
   var audioEl = document.querySelector('audio');
   if (!audioEl) return;
   var TARGET_PEAK = 0.5; // linear target ~ -6 dBFS (comfortable level)
-  var MAX_BOOST = 2.0;
+  // Attenuate-only: we NEVER go above the user's chosen volume. Boosting quiet
+  // tracks up to 2× was the "son trop fort" bug — it made intros/quiet tracks
+  // blast past where the slider was set. Now this only pulls LOUD tracks down
+  // toward the target, so normalization can only ever make things quieter.
+  var MAX_BOOST = 1.0;
   var currentBoost = 1;
   var measuring = false;
   var measuredSrc = '';
@@ -1037,9 +1044,12 @@ if ('serviceWorker' in navigator && !window.resonance) {
       } else {
         measuring = false;
         if (maxSample < 0.01) { currentBoost = 1; applyBoost(); return; }
-        // Compute boost to bring the peak up to TARGET_PEAK.
+        // Compute the gain that brings this track's peak toward TARGET_PEAK.
+        // Clamped to (0, MAX_BOOST]. With MAX_BOOST=1 this is attenuate-only:
+        // loud tracks (peak > target) get pulled down, quiet tracks are left
+        // at 1× (never boosted past the user's volume).
         var needed = TARGET_PEAK / maxSample;
-        currentBoost = Math.min(MAX_BOOST, Math.max(1, needed));
+        currentBoost = Math.min(MAX_BOOST, Math.max(0.1, needed));
         applyBoost();
       }
     }
@@ -1064,7 +1074,11 @@ if ('serviceWorker' in navigator && !window.resonance) {
     if (!cb || cb._normWired) return;
     cb._normWired = true;
     var cfg = window._appConfig || {};
-    cb.checked = cfg.normalize !== false;
+    // Off by default — must match isEnabled() (=== true). The checkbox used to
+    // read `!== false`, so it displayed as ON while the engine treated it as
+    // OFF: users thought normalization was safely enabled when the state was
+    // actually inconsistent.
+    cb.checked = cfg.normalize === true;
     cb.addEventListener('change', function() {
       var c = window._appConfig = window._appConfig || {};
       c.normalize = cb.checked;

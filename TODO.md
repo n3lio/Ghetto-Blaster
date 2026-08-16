@@ -7,6 +7,10 @@
 
 ## 🔥 Bugs / risques connus
 
+- [x] ~~**Mobile = page blanche / non stylée**~~ *(P0)* — v3.19.0 : CSP bloquait `fonts.googleapis.com` + `fonts.gstatic.com` → la font DM Sans ne chargeait pas et l'UI tombait en font système (aspect cassé). `style-src`/`font-src` autorisent maintenant Google Fonts. (Le TypeError `getConfig` était déjà guardé en v3.18.9.)
+- [x] ~~**Volume "trop fort" (normalisation)**~~ *(P0)* — v3.19.0 : la normalisation *boostait* les tracks calmes jusqu'à ×2 → dépassait le niveau réglé. Passée en **atténuation seule** (`MAX_BOOST = 1`), elle ne peut plus que baisser les tracks fortes. Checkbox Settings corrigée (affichait ON alors que le moteur était OFF).
+- [x] ~~**Volume non persistant entre tracks (saute/augmente)**~~ *(P0)* — v3.19.0 : le slider écrivait sur disque via `setConfig` mais pas dans `window._appConfig.volume` en mémoire → `setupVolumePersist` réappliquait la valeur de boot au `loadstart` suivant. Le slider synchronise maintenant la config en mémoire d'abord.
+- [x] ~~**Stats "Listening pattern" heatmap vide**~~ *(P1)* — v3.19.0 : les cellules utilisaient `hsl(var(--accent-h), var(--accent-s), …)`, variables jamais définies en CSS → fill invalide (transparent). Remplacé par `var(--hue)` + saturation fixe.
 - [x] ~~**IDs de tracks non stables entre rescans**~~ *(P0)* — fait en v3.6.0 : map `path → id` persistée dans `library-ids.json`, pruning des paths supprimés.
 - [x] ~~**Aucune authentification sur le LAN**~~ *(P0)* — fait en v3.6.0 : token 16 octets généré au boot, embarqué dans le QR-code, vérifié sur `/api/*` et upgrade WS, bypass localhost.
 - [x] ~~**`fs.watch` recursive sur Windows**~~ *(P1)* — chokidar wired avec fallback fs.watch.

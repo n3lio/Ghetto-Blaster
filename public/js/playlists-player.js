@@ -519,7 +519,13 @@ document.getElementById('volumeSlider').addEventListener('input', function(e) {
     sendRemoteCommand('set-volume', { volume: vol });
   } else {
     audio.volume = vol;
-    // Persist volume preference
+    // Keep the in-memory config in sync FIRST. setupVolumePersist re-applies
+    // window._appConfig.volume on every loadstart; if we only wrote to disk
+    // (async setConfig) the next track would snap back to the stale boot value
+    // — that was the "50% doesn't stick, jumps up on next track" bug.
+    window._appConfig = window._appConfig || {};
+    window._appConfig.volume = vol;
+    // Persist volume preference to disk (desktop only).
     if (isDesktop && window.resonance) window.resonance.setConfig({ volume: vol });
   }
 });
